@@ -80,16 +80,36 @@ target (a VPS, Render, Railway, etc.) was never going to hit it.
 """
 
 import logging
+import os
 import threading
-from functools import lru_cache
-from typing import List, Sequence
+import time
+from typing import Dict, List, Sequence
 
 logger = logging.getLogger("aura")
 
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 
+# ── Optional speed / safety knobs (all environment variables) ─────────────
+#   DISABLE_EMBEDDINGS=true  → skip semantic features entirely; every caller
+#                              falls back to rule-based scoring (fastest).
+#   EMBED_MAX_CHARS=1500     → only the first N characters of each text are
+#                              embedded. Embedding cost grows with length, and
+#                              the start of a job description / resume carries
+#                              most of the signal.
+#   EMBED_THREADS=1          → onnxruntime thread count. On small containers,
+#                              lower values can avoid CPU contention.
+_DISABLED = os.getenv("DISABLE_EMBEDDINGS", "false").strip().lower() == "true"
+_MAX_CHARS = int(os.getenv("EMBED_MAX_CHARS", "1500"))
+_THREADS = int(os.getenv("EMBED_THREADS", "0")) or None
+_CACHE_MAX = 4000
+
 _model = None
 _model_lock = threading.Lock()
+
+# text -> vector. Shared across requests: skill terms, taxonomy terms and
+# repeated phrases get embedded once per process instead of once per call.
+_vector_cache: Dict[str, List[float]] = {}
+_cache_lock = threading.Lock()
 
 
 def _load_model():
@@ -105,13 +125,18 @@ def _load_model():
     tries to use it (see is_available() below).
     """
     global _model
+    if _DISABLED:
+        raise RuntimeError("Embeddings disabled via DISABLE_EMBEDDINGS")
     if _model is not None:
         return _model
     with _model_lock:
         if _model is None:  # re-check inside the lock (another thread may have loaded it)
             from fastembed import TextEmbedding
             logger.info("Loading embedding model '%s' (onnxruntime backend)...", EMBEDDING_MODEL_NAME)
-            _model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME)
+            if _THREADS:
+                _model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME, threads=_THREADS)
+            else:
+                _model = TextEmbedding(model_name=EMBEDDING_MODEL_NAME)
             logger.info("Embedding model loaded.")
     return _model
 
@@ -125,6 +150,8 @@ def is_available() -> bool:
     existing rule-based-only behavior otherwise — semantic scoring is
     always an enhancement, never a hard dependency of /api/analyze.
     """
+    if _DISABLED:
+        return False
     try:
         _load_model()
         return True
@@ -135,20 +162,53 @@ def is_available() -> bool:
 
 def embed(texts: Sequence[str]) -> List[List[float]]:
     """
-    Embeds a batch of strings into semantic vectors in ONE model call.
-    Prefer this over calling embed_one() in a loop whenever you have
-    more than one text to embed — batching amortizes model overhead
-    and is significantly faster (e.g. embedding a resume once against
-    N job descriptions: embed([resume_text, *job_texts]) in one call).
+    Embeds a batch of strings into semantic vectors.
+
+    - Texts already embedded earlier in this process come straight from
+      the cache; only unseen texts go to the model, together, in ONE
+      call.
+    - Texts are truncated to EMBED_MAX_CHARS before embedding (and
+      before cache lookup), which keeps long job descriptions cheap.
+    - Logs how long each model call takes, so slow steps show up in
+      the host's logs.
 
     fastembed's .embed() returns a generator of numpy arrays (one per
-    input text, streamed lazily) rather than a single batch array —
-    list(...) + .tolist() below materializes and converts them to
-    plain Python floats, matching this module's public return type.
+    input text), so the result is materialized and converted to plain
+    Python floats, matching this module's public return type.
     """
     model = _load_model()
-    vectors = list(model.embed(list(texts)))
-    return [v.tolist() for v in vectors]
+    prepared = [(t or "")[:_MAX_CHARS] for t in texts]
+
+    local: Dict[str, List[float]] = {}
+    missing: List[str] = []
+    for t in prepared:
+        if t in local:
+            continue
+        cached = _vector_cache.get(t)
+        if cached is not None:
+            local[t] = cached
+        else:
+            local[t] = []  # placeholder so duplicates in this batch aren't queued twice
+            missing.append(t)
+
+    if missing:
+        start = time.perf_counter()
+        vectors = list(model.embed(missing))
+        for t, v in zip(missing, vectors):
+            local[t] = v.tolist()
+        elapsed = time.perf_counter() - start
+        logger.info(
+            "embed: %d new text(s), %d cached, %d chars, %.2fs",
+            len(missing), len(local) - len(missing), sum(len(t) for t in missing), elapsed,
+        )
+        with _cache_lock:
+            for t in missing:
+                _vector_cache[t] = local[t]
+            if len(_vector_cache) > _CACHE_MAX:
+                for key in list(_vector_cache)[: _CACHE_MAX // 4]:
+                    _vector_cache.pop(key, None)
+
+    return [local[t] for t in prepared]
 
 
 def embed_one(text: str) -> List[float]:
@@ -177,39 +237,81 @@ def cosine_similarity(vec_a: Sequence[float], vec_b: Sequence[float]) -> float:
 def semantic_similarity(text_a: str, text_b: str) -> float:
     """
     One-shot convenience: embeds both strings and returns their cosine
-    similarity, in [0, 1] in practice.
-
-    For REPEATED comparisons against the same text (e.g. one resume
-    checked against many job descriptions, or many skill-taxonomy
-    terms checked against the same resume), don't call this in a loop
-    — it re-embeds both sides every call. Instead call embed() once
-    per unique text and reuse the vectors with cosine_similarity(), or
-    use cached_semantic_similarity() below for the taxonomy-term case.
+    similarity, in [0, 1] in practice. Because embed() now caches every
+    text, repeated comparisons against the same text no longer
+    re-embed it.
     """
     vec_a, vec_b = embed([text_a, text_b])
     return cosine_similarity(vec_a, vec_b)
 
 
-@lru_cache(maxsize=512)
 def _cached_embed_one(text: str) -> tuple:
-    """
-    Cached single-text embedding for strings that get compared
-    repeatedly across many resumes within the same process — e.g. the
-    fixed category keywords in resume_enricher.SKILL_TAXONOMY, or the
-    fixed skill lists in job_requirements.JOB_REQUIREMENTS. Returns a
-    tuple (hashable, required for lru_cache) instead of a list.
-    """
+    """Kept for backward compatibility; embed() itself now caches."""
     return tuple(embed_one(text))
 
 
 def cached_semantic_similarity(text_a: str, text_b: str) -> float:
     """
-    Like semantic_similarity(), but skips re-embedding text_a (or
-    text_b) if it's been seen before in this process — use this when
-    one side of the comparison is drawn from a small, repeating,
-    fixed set of terms (a taxonomy category, a skill list), which is
-    the common case in this codebase.
+    Like semantic_similarity(). Kept as a separate name because other
+    modules call it; both now share the same process-wide cache.
     """
-    vec_a = _cached_embed_one(text_a)
-    vec_b = _cached_embed_one(text_b)
+    vec_a = embed_one(text_a)
+    vec_b = embed_one(text_b)
     return cosine_similarity(vec_a, vec_b)
+
+
+# ── Fast batch matching (numpy) ───────────────────────────────────────────
+# Comparing one term against ~150 known skills with pure-Python cosine
+# similarity is slow on small CPUs. These helpers embed everything in
+# batches and score all pairs with a single matrix multiply.
+
+def _normalized(vectors):
+    import numpy as np
+    arr = np.asarray(vectors, dtype=np.float32)
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    norms = np.linalg.norm(arr, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return arr / norms
+
+
+def normalized_matrix(texts: Sequence[str]):
+    """Embeds texts (one batched call) and returns an L2-normalized matrix, one row per text."""
+    return _normalized(embed(list(texts)))
+
+
+def best_match_in_matrix(query: str, matrix):
+    """
+    Returns (row_index, cosine_score) of the row in `matrix` (from
+    normalized_matrix) closest to `query`, or (None, 0.0) if nothing
+    scores above 0.
+    """
+    import numpy as np
+    q = _normalized([embed_one(query)])[0]
+    scores = matrix @ q
+    idx = int(np.argmax(scores))
+    score = float(scores[idx])
+    if score <= 0:
+        return None, 0.0
+    return idx, score
+
+
+def best_matches(queries: Sequence[str], corpus: Sequence[str]):
+    """
+    For every query, returns (corpus_index, cosine_score) of its closest
+    corpus text, or (None, 0.0) if nothing scores above 0. Queries and
+    corpus are each embedded in one batch, then scored with one matrix
+    multiply.
+    """
+    import numpy as np
+    if not queries or not corpus:
+        return [(None, 0.0) for _ in queries]
+    q = _normalized(embed(list(queries)))
+    c = _normalized(embed(list(corpus)))
+    sims = q @ c.T
+    out = []
+    for row in sims:
+        idx = int(np.argmax(row))
+        score = float(row[idx])
+        out.append((idx, score) if score > 0 else (None, 0.0))
+    return out

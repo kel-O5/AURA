@@ -188,13 +188,24 @@ def skills_present(
 
     candidates = _extract_candidate_phrases(skills_block, raw_text) if available else []
 
-    for term in remaining:
-        term_l = term.strip().lower()
-        if not term_l or len(term_l) < MIN_TERM_LEN_FOR_SEMANTIC or not candidates:
-            results[term] = SkillMatch(present=False)
-            continue
+    # Batch the semantic step: embed every eligible term and every candidate
+    # phrase once, then score all pairs with a single matrix multiply
+    # (instead of one slow embedding comparison per term/phrase pair).
+    eligible = [t for t in remaining if len(t.strip()) >= MIN_TERM_LEN_FOR_SEMANTIC]
+    best_by_term: dict = {}
+    if candidates and eligible:
+        try:
+            matches = embedding_service.best_matches(
+                [t.strip().lower() for t in eligible],
+                [p.lower() for p in candidates],
+            )
+            for term, (idx, score) in zip(eligible, matches):
+                best_by_term[term] = (candidates[idx] if idx is not None else None, score)
+        except Exception as exc:
+            logger.warning("Batched semantic skill match failed: %s", exc)
 
-        best_phrase, best_score = _best_semantic_match(term_l, candidates)
+    for term in remaining:
+        best_phrase, best_score = best_by_term.get(term, (None, 0.0))
         if best_phrase is not None and best_score >= SKILL_MATCH_THRESHOLD:
             results[term] = SkillMatch(
                 present=True,

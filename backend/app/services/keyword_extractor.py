@@ -567,6 +567,16 @@ def _semantic_resume_terms(candidates: List[str], seen_keys: set) -> List[str]:
         logger.warning("Embedding model unavailable for resume keywords: %s", exc)
         return []
 
+    pool: List[str] = []
+    for cand in candidates:
+        pkey = cand.lower()
+        if len(pkey) < RESUME_SEMANTIC_MIN_LEN or pkey in STOP_WORDS or _canon(pkey) in seen_keys:
+            continue
+        pool.append(pkey)
+        if len(pool) >= RESUME_SEMANTIC_CANDIDATES:
+            break
+    _prefetch_embeddings(pool)
+
     added: List[str] = []
     added_keys: set[str] = set()
     checked = 0
@@ -878,19 +888,38 @@ SEMANTIC_SKILL_MATCH_THRESHOLD = 0.62
 SEMANTIC_CANDIDATE_POOL_SIZE = 40
 
 
+_known_skill_matrix_cache = None
+
+
+def _known_skill_matrix():
+    """Embeds KNOWN_SKILL_TERMS once (one batched call) and keeps the normalized matrix."""
+    global _known_skill_matrix_cache
+    if _known_skill_matrix_cache is None:
+        _known_skill_matrix_cache = embedding_service.normalized_matrix(_KNOWN_SKILL_TERMS_SORTED)
+    return _known_skill_matrix_cache
+
+
+def _prefetch_embeddings(terms) -> None:
+    """Embeds many terms in ONE batched call so later per-term lookups hit the cache."""
+    try:
+        terms = [t for t in terms if t]
+        if terms:
+            embedding_service.embed(terms)
+    except Exception as exc:
+        logger.warning("Embedding prefetch skipped: %s", exc)
+
+
 def _closest_known_skill_scored(candidate: str) -> tuple:
     """(closest KNOWN_SKILL_TERMS entry, cosine score). Fails soft to (None, -1.0)
     - a negative score means "the embedding model errored", not "no match"."""
-    best_term, best_score = None, 0.0
-    for known in _KNOWN_SKILL_TERMS_SORTED:
-        try:
-            score = embedding_service.cached_semantic_similarity(candidate, known)
-        except Exception as exc:
-            logger.warning("Semantic skill match failed for '%s': %s", candidate, exc)
-            return None, -1.0
-        if score > best_score:
-            best_term, best_score = known, score
-    return best_term, best_score
+    try:
+        idx, score = embedding_service.best_match_in_matrix(candidate, _known_skill_matrix())
+    except Exception as exc:
+        logger.warning("Semantic skill match failed for '%s': %s", candidate, exc)
+        return None, -1.0
+    if idx is None:
+        return None, 0.0
+    return _KNOWN_SKILL_TERMS_SORTED[idx], score
 
 
 def _closest_known_skill(candidate: str, threshold: Optional[float] = None) -> Optional[str]:
@@ -1093,7 +1122,9 @@ def extract_skill_terms_from_posting(
     #          anything); every posting after that reuses those cached
     #          embeddings and only pays for its own new candidate terms.
     if embedding_service.is_available():
-        for term in _tfidf_keywords(text, top_n=SEMANTIC_CANDIDATE_POOL_SIZE):
+        _pool_terms = _tfidf_keywords(text, top_n=SEMANTIC_CANDIDATE_POOL_SIZE)
+        _prefetch_embeddings([t.lower() for t in _pool_terms])
+        for term in _pool_terms:
             key = term.lower()
             if not _eligible(key):
                 continue
