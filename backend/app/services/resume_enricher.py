@@ -202,61 +202,60 @@ SPELLING_WHITELIST = {
 # Each returns a float 0–100.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Fixed reference vocabulary for the Keywords dimension: every term in
+# SKILL_TAXONOMY, matched as a whole word. It never changes between runs, so
+# the same resume always gets the same Keywords score.
+_KEYWORD_REFERENCE_PATTERNS = [
+    re.compile(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])")
+    for term in sorted({t for terms in SKILL_TAXONOMY.values() for t in terms})
+]
+
+# Distinct reference terms a resume needs to hit for full coverage credit.
+KEYWORD_COVERAGE_TARGET = 12
+
+
 def _score_keywords(
     resume: ParsedResume,
     keywords: list[str],
     top_jobs: list[dict],
 ) -> float:
     """
-    Measures keyword coverage relative to what target jobs demand.
+    Measures how keyword-rich the resume is, using ONLY the resume itself.
 
-    NOTE: keywords are extracted FROM the resume, so checking whether they
-    appear IN the resume is circular and always returns 100%. Instead we
-    measure two things that can genuinely be missing:
+    FIXED (QA: "same resume, different ATS score"): this used to compare the
+    resume against the words found in the top JSearch job descriptions. Those
+    postings change with the target job, the target companies, the freelance
+    toggle and the day the search runs, so the same resume scored differently
+    on every analysis. The ATS score is a property of the resume, so this
+    dimension no longer reads `top_jobs` (the parameter is kept so callers
+    don't change). How well the resume fits specific jobs is shown separately
+    by the Match Score.
 
-    1. job_skill_coverage (60% weight)
-       The job scorer in job_scorer.py stores `matched_skills` — tokens from
-       the job description that overlapped with the resume. But there are also
-       skills in each job description that did NOT match. We approximate the
-       full required skill set from all top-job descriptions and check what
-       fraction the resume actually covers.
+    1. keyword_coverage (60% weight)
+       How many distinct terms from the fixed SKILL_TAXONOMY vocabulary the
+       resume contains (whole-word match, no embeddings, no network).
+       KEYWORD_COVERAGE_TARGET distinct terms = full credit.
 
     2. keyword_density (40% weight)
        Ratio of unique meaningful keywords to total word count. A keyword-rich
        resume has a high density; one padded with filler prose scores lower.
-       Ideal density ≈ 8–15% unique meaningful terms.
+       Ideal density ~ 8-15% unique meaningful terms.
     """
     raw = resume.raw_text.lower()
     word_count = max(resume.word_count, 1)
 
-    # ── 1. Job skill coverage: what fraction of job-demanded terms are present ──
-    # Collect ALL tokens from top-job titles + descriptions (not just matched ones)
-    # These represent what the market expects for this role.
-    job_vocab: set[str] = set()
-    for job in top_jobs[:10]:
-        title_tokens = set(re.findall(r"[a-z][a-z0-9\+\#\.]{2,}", job.get("title", "").lower()))
-        desc_tokens  = set(re.findall(r"[a-z][a-z0-9\+\#\.]{2,}", job.get("description", "").lower()))
-        job_vocab |= title_tokens | desc_tokens
+    # -- 1. Keyword coverage against the fixed vocabulary -------------------
+    hits = sum(1 for pattern in _KEYWORD_REFERENCE_PATTERNS if pattern.search(raw))
+    coverage_score = min(hits / KEYWORD_COVERAGE_TARGET, 1.0) * 100
 
-    # Remove generic stop words that inflate the denominator
-    job_vocab -= _GENERIC_JOB_TERMS
-
-    if job_vocab:
-        matched = sum(1 for term in job_vocab if term in raw)
-        job_skill_coverage = min(matched / len(job_vocab) * 100, 100)
-    else:
-        # No job data — fall back to a neutral 50
-        job_skill_coverage = 50.0
-
-    # ── 2. Keyword density: unique meaningful terms / total words ─────────────
-    # Extract meaningful tokens from the resume (reuse same regex as job_scorer)
+    # -- 2. Keyword density: unique meaningful terms / total words ----------
     resume_tokens = set(re.findall(r"[a-z][a-z0-9\+\#\.]{2,}", raw)) - _GENERIC_JOB_TERMS
-    density = len(resume_tokens) / word_count  # typical range 0.05–0.20
+    density = len(resume_tokens) / word_count  # typical range 0.05-0.20
 
     # Scale: density of 0.12+ = full 100, below 0.04 = near 0
     density_score = min(density / 0.12 * 100, 100)
 
-    return round(job_skill_coverage * 0.60 + density_score * 0.40, 1)
+    return round(coverage_score * 0.60 + density_score * 0.40, 1)
 
 
 def _score_format(resume: ParsedResume) -> float:
