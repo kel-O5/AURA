@@ -226,9 +226,9 @@ export default function LoginPage() {
             logo + card fade in together once on load. */}
         <Reveal className="flex w-full max-w-[480px] flex-col items-center gap-5">
           {/* Logo. Same file the Navbar uses (lives in /public). */}
-          <Link href="/" className="flex items-center justify-center gap-[10px]">
-            <Image src="/Aura_LogoRaster.png" alt="" width={32} height={32} priority />
-            <span className="text-[24px] font-bold text-[#111827]">Aura</span>
+          <Link href="/" className="flex items-center justify-center gap-[12px]">
+            <Image src="/Aura_LogoRaster.png" alt="" width={48} height={48} priority />
+            <span className="text-[30px] font-bold text-[#111827]">Aura</span>
           </Link>
 
           {/* Form card */}
