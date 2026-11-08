@@ -210,8 +210,12 @@ _KEYWORD_REFERENCE_PATTERNS = [
     for term in sorted({t for terms in SKILL_TAXONOMY.values() for t in terms})
 ]
 
-# Distinct reference terms a resume needs to hit for full coverage credit.
-KEYWORD_COVERAGE_TARGET = 12
+# A resume earns full coverage credit when it contains this share of the whole
+# reference vocabulary (twelve categories from Communication to Security).
+# Half is already unusually broad - no real resume covers every category - so
+# a typical strong IT resume lands around 60-75 instead of everyone hitting 100.
+KEYWORD_COVERAGE_FRACTION = 0.5
+KEYWORD_COVERAGE_TARGET = max(1, round(len(_KEYWORD_REFERENCE_PATTERNS) * KEYWORD_COVERAGE_FRACTION))
 
 
 def _score_keywords(
@@ -234,7 +238,7 @@ def _score_keywords(
     1. keyword_coverage (60% weight)
        How many distinct terms from the fixed SKILL_TAXONOMY vocabulary the
        resume contains (whole-word match, no embeddings, no network).
-       KEYWORD_COVERAGE_TARGET distinct terms = full credit.
+       KEYWORD_COVERAGE_TARGET distinct terms (half the vocabulary) = full credit.
 
     2. keyword_density (40% weight)
        Ratio of unique meaningful keywords to total word count. A keyword-rich
