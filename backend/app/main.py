@@ -72,6 +72,7 @@ NOTES / THINGS WORTH DOUBLE-CHECKING
   format/level is controlled in one place for the whole app.
 """
 
+import json
 import os
 import threading
 
@@ -143,6 +144,29 @@ app.include_router(resumes_router, prefix="/api")
 app.include_router(analysis_history_router, prefix="/api")
 
 
+
+def _normalize_companies(raw: str) -> str:
+    """
+    Accepts target_companies as a JSON list ('["Amazon","Apple"]') OR as a
+    plain comma/newline-separated string ('Amazon, Apple') and always hands
+    handle_analyze a JSON list string. The frontend currently sends the plain
+    form, which the controller could not parse (so company targeting was ignored).
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return "[]"
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return json.dumps([str(x).strip() for x in parsed if str(x).strip()])
+        if isinstance(parsed, str):
+            raw = parsed
+    except (ValueError, TypeError):
+        pass
+    names = [n.strip() for n in raw.replace("\n", ",").split(",") if n.strip()]
+    return json.dumps(names)
+
+
 @app.post("/api/analyze")
 async def analyze_resume(
     file: UploadFile = File(...),
@@ -178,7 +202,7 @@ async def analyze_resume(
     return await handle_analyze(
         file,
         target_job,
-        target_companies,
+        _normalize_companies(target_companies),
         user_id=user.id,
         freelance_only=freelance_only,
     )
