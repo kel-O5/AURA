@@ -5,7 +5,19 @@ import { NextRequest, NextResponse } from "next/server";
 // production, and to avoid CORS issues in development.
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
+// Let Vercel keep this route running while the backend analyzes the resume.
+// Analysis can take minutes on a small backend. If your Vercel plan rejects
+// this value at deploy time, lower it (for example to 60).
+export const maxDuration = 300;
+
+// Stop waiting just before Vercel's limit so the user gets a clear message
+// instead of an endless spinner.
+const BACKEND_TIMEOUT_MS = 290_000;
+
 export async function POST(req: NextRequest) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BACKEND_TIMEOUT_MS);
+
   try {
     // The access token lives in an httpOnly cookie (set by
     // /api/auth/signin and /api/auth/signup), so it's invisible to
@@ -34,11 +46,22 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${accessToken}`,
       },
       body: formData,
+      signal: controller.signal,
       // Do NOT set Content-Type — fetch sets it automatically with the
       // correct multipart boundary when body is FormData
     });
 
-    const data = await backendRes.json();
+    // The backend normally returns JSON, but a sleeping or crashed host can
+    // return an HTML error page. Read it as text first so that doesn't throw.
+    const raw = await backendRes.text();
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = {
+        detail: `The analysis server returned an unexpected response (status ${backendRes.status}). It may be waking up — please wait a minute and try again.`,
+      };
+    }
 
     if (!backendRes.ok) {
       return NextResponse.json(data, { status: backendRes.status });
@@ -46,10 +69,19 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(data);
   } catch (err: any) {
+    if (err?.name === "AbortError") {
+      console.error("[api/analyze] backend timed out");
+      return NextResponse.json(
+        { detail: "The analysis is taking too long. Please try again in a moment." },
+        { status: 504 }
+      );
+    }
     console.error("[api/analyze] proxy error:", err);
     return NextResponse.json(
-      { detail: "Could not reach the analysis server. Make sure the backend is running on port 8000." },
+      { detail: "Could not reach the analysis server. It may be starting up — please try again in a minute." },
       { status: 502 }
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
