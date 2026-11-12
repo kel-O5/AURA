@@ -44,8 +44,8 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ADDED: data privacy / data collection notice shown when the user presses
-// "Upload Resume". The analysis only starts after "Agree & Analyze".
+// ADDED: data privacy / data collection notice shown BEFORE the file browser opens
+// (or before a dropped file is accepted). The user must press "Agree & Continue".
 const PRIVACY_POINTS: { title: string; text: string }[] = [
   {
     title: 'What we collect',
@@ -165,7 +165,7 @@ function PrivacyConsentDialog({
                 <h2 id="privacy-consent-title" className="text-[20px] font-extrabold leading-tight text-[#111827]">
                   Data Privacy &amp; Data Collection
                 </h2>
-                <p className="text-[13px] text-[#4b5563]">Please review before we analyze your resume.</p>
+                <p className="text-[13px] text-[#4b5563]">Please review before you choose your resume.</p>
               </div>
             </div>
 
@@ -205,7 +205,7 @@ function PrivacyConsentDialog({
               >
                 Terms of Service
               </Link>
-              . They open in a new tab, so your upload is kept.
+              . They open in a new tab, so nothing you have selected is lost.
             </p>
 
             {/* Actions */}
@@ -223,7 +223,7 @@ function PrivacyConsentDialog({
                 onClick={onConfirm}
                 className={`rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-6 py-[12px] text-[14px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
               >
-                Agree &amp; Analyze
+                Agree &amp; Continue
               </button>
             </div>
           </motion.div>
@@ -243,12 +243,22 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
   const [internshipOnly, setInternshipOnly] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
-  // ADDED: the data privacy notice that appears when "Upload Resume" is pressed.
+  // ADDED: the data privacy notice shown before the file browser opens. While it is
+  // open, `pendingRef` remembers what the user was trying to do: open the browser
+  // ('browse') or accept a file they dropped (the File itself).
   const [consentOpen, setConsentOpen] = useState(false);
-  const closeConsent = useCallback(() => setConsentOpen(false), []);
+  const pendingRef = useRef<'browse' | File | null>(null);
+  const closeConsent = useCallback(() => {
+    pendingRef.current = null;
+    setConsentOpen(false);
+  }, []);
 
+  // Clicking the drop zone / "click to browse": show the privacy notice first.
+  // The file browser opens only after "Agree & Continue" (see confirmConsent).
   const openPicker = () => {
-    if (!isAnalyzing) inputRef.current?.click();
+    if (isAnalyzing) return;
+    pendingRef.current = 'browse';
+    setConsentOpen(true);
   };
 
   // Validates and stores the chosen file (from the picker or a drop).
@@ -274,7 +284,19 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
     e.preventDefault();
     setIsDragging(false);
     if (isAnalyzing) return;
-    acceptFile(e.dataTransfer.files?.[0]);
+    const dropped = e.dataTransfer.files?.[0];
+    if (!dropped) return;
+    // A dropped file is accepted only after the privacy notice is agreed to.
+    pendingRef.current = dropped;
+    setConsentOpen(true);
+  };
+
+  const confirmConsent = () => {
+    const pending = pendingRef.current;
+    pendingRef.current = null;
+    setConsentOpen(false);
+    if (pending === 'browse') inputRef.current?.click();
+    else if (pending) acceptFile(pending);
   };
 
   const handleZoneKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -289,20 +311,11 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
     setFileError(null);
   };
 
-  // Pressing "Upload Resume": check the file first, then show the data privacy
-  // notice. The analysis starts only when the user agrees (startAnalysis).
   const handleSubmit = () => {
-    if (isAnalyzing) return;
     if (!file) {
       setFileError('Please choose a resume to upload.');
       return;
     }
-    setConsentOpen(true);
-  };
-
-  const startAnalysis = () => {
-    setConsentOpen(false);
-    if (!file) return;
     // Job titles are optional. JobTitleSelector is select-only, so every title in
     // `jobTitles` is already a supported role; an empty list means "Any".
     // The API expects comma-separated strings (same as companies).
@@ -445,12 +458,12 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
               Analyzing...
             </>
           ) : (
-            'Upload Resume'
+            'Analyze Resume'
           )}
         </button>
       </div>
 
-      <PrivacyConsentDialog open={consentOpen} onCancel={closeConsent} onConfirm={startAnalysis} />
+      <PrivacyConsentDialog open={consentOpen} onCancel={closeConsent} onConfirm={confirmConsent} />
     </div>
   );
 }
