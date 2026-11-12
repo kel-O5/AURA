@@ -179,9 +179,11 @@ def build_search_terms(
     return terms
 
 
-# Extra company cards (beyond the normal top companies) reserved for freelance
-# postings so the dashboard's Freelance filter has something to show.
-_FREELANCE_EXTRA_COMPANIES = 3
+# Job types that have their own dashboard filter but rarely rank high enough to
+# reach it on score alone. Each gets reserved room in the results.
+_RESERVED_JOB_TYPES = ("Freelance", "Internship")
+_RESERVED_EXTRA_COMPANIES = 3   # extra company cards per type, beyond the normal top companies
+_RESERVED_MAX_JOBS = 10         # extra top-jobs rows per type
 
 
 def _company_key(match) -> str:
@@ -218,42 +220,52 @@ class JobMatcher:
         self._top_companies       = top_companies
 
 
-    def _ensure_freelance_visible(self, scorer, scored_jobs, companies, top_jobs, target_companies):
-        """Make sure freelance postings can actually reach the dashboard.
+
+    def _ensure_job_types_visible(self, scorer, scored_jobs, companies, top_jobs, target_companies):
+        """Make sure Freelance and Internship postings can reach the dashboard.
 
         Company cards are built from the top-ranked companies, and each card's
-        job type comes from that company's best-scoring job. With a handful of
-        freelance postings among dozens of regular ones, none of them would
-        normally make the cut, so the Freelance filter would always be empty.
+        job type comes from that company's best-scoring job. A handful of
+        freelance or internship postings among dozens of regular ones would
+        normally never make the cut, leaving those filters empty.
 
-        This (1) adds every freelance posting that missed the top-jobs list to
-        the END of it (top_jobs[0] and the existing order are untouched), and
-        (2) adds up to _FREELANCE_EXTRA_COMPANIES freelance-only company cards
-        beyond the normal top companies.
+        For each type in _RESERVED_JOB_TYPES this (1) appends up to
+        _RESERVED_MAX_JOBS of its postings that missed the top-jobs list to the
+        END of it (top_jobs[0] and the existing order are untouched), and
+        (2) adds up to _RESERVED_EXTRA_COMPANIES company cards built from that
+        type's postings, beyond the normal top companies.
         """
-        freelance = [
-            s for s in scored_jobs
-            if getattr(getattr(s, "job", None), "job_type", None) == "Freelance"
-        ]
-        if not freelance:
-            return companies, top_jobs
-
+        companies = list(companies)
+        top_jobs = list(top_jobs)
         in_top = {id(s) for s in top_jobs}
-        top_jobs = list(top_jobs) + [s for s in freelance if id(s) not in in_top]
-
         present = {_company_key(c) for c in companies}
-        freelance_ranked = scorer.rank_companies(
-            freelance,
-            top_n=self._top_companies,
-            target_companies=target_companies,
-        )
-        added = [c for c in freelance_ranked if _company_key(c) not in present]
-        added = added[:_FREELANCE_EXTRA_COMPANIES]
-        logger.info(
-            "Freelance: %d posting(s) scored, %d added to top jobs, %d extra company card(s)",
-            len(freelance), len(top_jobs) - len(in_top), len(added),
-        )
-        return list(companies) + added, top_jobs
+
+        for job_type in _RESERVED_JOB_TYPES:
+            typed = [
+                s for s in scored_jobs
+                if getattr(getattr(s, "job", None), "job_type", None) == job_type
+            ]
+            if not typed:
+                continue
+
+            extra_jobs = [s for s in typed if id(s) not in in_top][:_RESERVED_MAX_JOBS]
+            top_jobs.extend(extra_jobs)
+            in_top.update(id(s) for s in extra_jobs)
+
+            ranked = scorer.rank_companies(
+                typed,
+                top_n=self._top_companies,
+                target_companies=target_companies,
+            )
+            added = [c for c in ranked if _company_key(c) not in present][:_RESERVED_EXTRA_COMPANIES]
+            companies.extend(added)
+            present.update(_company_key(c) for c in added)
+            logger.info(
+                "%s: %d posting(s) scored, %d added to top jobs, %d extra company card(s)",
+                job_type, len(typed), len(extra_jobs), len(added),
+            )
+
+        return companies, top_jobs
 
     def match(
         self,
@@ -261,7 +273,8 @@ class JobMatcher:
         target_job: str = "",
         target_job_description: str = "",
         target_companies: Optional[List[str]] = None,
-        freelance_only: bool = False,
+        internship_only: bool = False,
+        target_jobs: Optional[List[str]] = None,
     ) -> MatchResult:
         """
         PUBLIC ENTRY POINT — runs the full extract-keywords -> fetch-jobs ->
@@ -291,17 +304,31 @@ class JobMatcher:
             ranked company list.
         """
         target_companies = target_companies or []
-        target_job = (target_job or "").strip()
-        # freelance_only: when True, JSearch is queried for freelance postings
-        # and only listings labelled "Freelance" are kept (see
-        # JSearchClient.fetch_jobs). Default False = unchanged behavior.
+
+        # Several target titles may be selected (`target_jobs`). `target_job`
+        # stays supported for single-title callers. `target_job` below always
+        # means the PRIMARY (first) title.
+        titles: List[str] = []
+        for t in (target_jobs or []) + [target_job]:
+            t = (t or "").strip()
+            if t and t.lower() not in {x.lower() for x in titles}:
+                titles.append(t)
+        target_job = titles[0] if titles else ""
+        # internship_only: when True, JSearch is queried for internship postings
+        # and only listings labelled "Internship" are kept (see
+        # JSearchClient.fetch_jobs). Default False = all job types, with
+        # freelance postings included so the dashboard's Job Type filter can
+        # show them.
 
         # IT-only: a target title outside the IT field is not used to steer
         # the search or scoring (the frontend dropdown already prevents this;
         # this is the server-side guard for direct API calls).
-        if target_job and self.it_only and not is_it_title(target_job):
-            logger.warning("Ignoring non-IT target job: %r", target_job)
-            target_job = ""
+        if self.it_only:
+            non_it = [t for t in titles if not is_it_title(t)]
+            if non_it:
+                logger.warning("Ignoring non-IT target job(s): %r", non_it)
+            titles = [t for t in titles if is_it_title(t)]
+        target_job = titles[0] if titles else ""
 
         logger.info("Extracting keywords from resume...")
         resume_keywords = extract_keywords(resume, top_n=self.top_keywords)
@@ -311,7 +338,7 @@ class JobMatcher:
         # short but always present when set; a pasted JD is longer/more
         # specific but optional (and, as of this revision, not even
         # wired up on the frontend) — both should count when present.
-        target_text = " ".join(t for t in [target_job, target_job_description] if t).strip()
+        target_text = " ".join([*titles, target_job_description]).strip()
 
         jd_keywords: List[str] = []
         if target_text:
@@ -324,7 +351,7 @@ class JobMatcher:
         # win ties for search-term priority below.
         keywords: List[str] = []
         seen: set[str] = set()
-        for kw in ([target_job] if target_job else []) + jd_keywords + resume_keywords:
+        for kw in titles + jd_keywords + resume_keywords:
             key = kw.lower()
             if key and key not in seen:
                 seen.add(key)
@@ -345,11 +372,37 @@ class JobMatcher:
         if inferred_role:
             logger.info("No target job given; inferred role from resume: %r", inferred_role)
 
-        search_terms = build_search_terms(
-            role=role,
-            keywords=jd_keywords + resume_keywords,
-            max_terms=self.max_keywords_queried,
-        ) or list(keywords[:self.max_keywords_queried])
+        if len(titles) > 1:
+            # Several roles share the same query budget (API usage is unchanged):
+            # each role's own query list is interleaved round-robin, so with
+            # 3 titles the first 3 queries are one per role, then the
+            # "<role> <skill>" combos follow.
+            per_role = [
+                build_search_terms(
+                    role=t,
+                    keywords=jd_keywords + resume_keywords,
+                    max_terms=self.max_keywords_queried,
+                )
+                for t in titles
+            ]
+            search_terms = []
+            seen_terms: set[str] = set()
+            for rank in range(self.max_keywords_queried):
+                for terms in per_role:
+                    if rank < len(terms) and terms[rank].lower() not in seen_terms:
+                        seen_terms.add(terms[rank].lower())
+                        search_terms.append(terms[rank])
+                    if len(search_terms) >= self.max_keywords_queried:
+                        break
+                if len(search_terms) >= self.max_keywords_queried:
+                    break
+            search_terms = search_terms or list(keywords[:self.max_keywords_queried])
+        else:
+            search_terms = build_search_terms(
+                role=role,
+                keywords=jd_keywords + resume_keywords,
+                max_terms=self.max_keywords_queried,
+            ) or list(keywords[:self.max_keywords_queried])
 
         # Add a few company-steered queries so listings from the user's
         # named target companies have a real chance of showing up, even
@@ -367,10 +420,10 @@ class JobMatcher:
             keywords=search_terms,
             results_per_keyword=self.results_per_keyword,
             max_keywords=len(search_terms),
-            freelance_only=freelance_only,
+            internship_only=internship_only,
             # Normal mode also gets one freelance-biased query so the
             # dashboard's Freelance filter has postings to show.
-            include_freelance=not freelance_only,
+            include_freelance=not internship_only,
             # Search freelance work for the target role (or best JD/resume
             # term), not whichever resume skill happens to come first.
             freelance_keyword=top_term,
@@ -394,6 +447,7 @@ class JobMatcher:
             target_description=target_text,
             target_job=target_job,
             search_terms=search_terms,
+            target_jobs=titles,
         )
         scored_jobs = scorer.score_all(jobs)
         companies   = scorer.rank_companies(
@@ -403,8 +457,8 @@ class JobMatcher:
         )
 
         top_jobs = scored_jobs[:self._top_jobs]
-        if not freelance_only:
-            companies, top_jobs = self._ensure_freelance_visible(
+        if not internship_only:
+            companies, top_jobs = self._ensure_job_types_visible(
                 scorer, scored_jobs, companies, top_jobs, target_companies,
             )
 

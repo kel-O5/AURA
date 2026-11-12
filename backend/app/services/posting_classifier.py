@@ -28,7 +28,7 @@ from app.data.job_requirements import JOB_REQUIREMENTS, JOB_TITLE_ALIASES
 
 # Exact strings the frontend filters use - keep these in sync with
 # CompanyMatchCarousel.tsx.
-JOB_TYPES: List[str] = ["Full-time", "Part-time", "Contractual", "Freelance"]
+JOB_TYPES: List[str] = ["Full-time", "Part-time", "Contractual", "Freelance", "Internship"]
 EXPERIENCE_LEVELS: List[str] = ["Entry-Level", "Junior Level", "Mid-Level", "Senior"]
 TARGET_JOBS: List[str] = list(JOB_REQUIREMENTS.keys())  # the 20 supported roles
 
@@ -60,9 +60,14 @@ _ENUM_TO_TYPE = {
     "CONTRACTOR": "Contractual",
     "CONTRACT": "Contractual",
     "CONTRACTUAL": "Contractual",
+    "INTERN": "Internship",
+    "INTERNSHIP": "Internship",
 }
 
 _FREELANCE_RE = re.compile(r"\bfree[\s-]?lanc(?:e|er|ers|ing)\b", re.I)
+# "Intern", "Interns", "Internship" as whole words only - never "internal" or
+# "international". Titles only: descriptions mention interns in passing too often.
+_INTERN_TITLE_RE = re.compile(r"\bintern(?:ship)?s?\b", re.I)
 # In a TITLE a bare "contract" is a reliable signal ("smart contract" is not).
 _CONTRACT_TITLE_RE = re.compile(r"(?<!smart )\bcontract(?:ual|or)?\b", re.I)
 # In free text only the unambiguous phrasings count.
@@ -105,6 +110,10 @@ def classify_job_type(raw: dict, title: str) -> Optional[str]:
     # "Freelance" in the title is explicit, whatever the structured field says.
     if _FREELANCE_RE.search(title):
         return "Freelance"
+
+    # "... Intern" / "Internship ..." in the title is explicit too.
+    if _INTERN_TITLE_RE.search(title):
+        return "Internship"
 
     if mapped:
         # JSearch has no freelance value; those postings arrive as CONTRACTOR.

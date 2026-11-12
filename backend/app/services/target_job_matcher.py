@@ -137,6 +137,61 @@ def _resolve_target_job(target_job: str) -> Optional[str]:
 
 
 # ============================================================
+# MULTIPLE TARGET JOBS
+# ============================================================
+
+def split_target_jobs(target_job: str) -> list[str]:
+    """
+    "Backend Developer, Data Engineer" -> ["Backend Developer", "Data Engineer"].
+    The upload form can send several titles joined with commas. A single
+    title (or blank) comes back as a 0/1-item list.
+    """
+    return [t.strip() for t in (target_job or "").split(",") if t.strip()]
+
+
+def _unique(items: list) -> list:
+    return list(dict.fromkeys(items))
+
+
+def merge_target_job_gaps(gaps: list[dict]) -> Optional[dict]:
+    """
+    Combines per-title gap results into ONE dict with the same shape the rest
+    of the pipeline already expects (resume_enricher, certifications).
+
+    - "target_job" becomes the titles joined with ", ".
+    - matched lists are the union across titles.
+    - a skill/certification still missing for ANY chosen title stays missing;
+      something required for one title and only optional for another is kept
+      as required.
+    """
+    gaps = [g for g in gaps if g]
+    if not gaps:
+        return None
+    if len(gaps) == 1:
+        return gaps[0]
+
+    def union(key: str) -> list:
+        return _unique([item for g in gaps for item in g.get(key, [])])
+
+    missing_required = union("missing_required_skills")
+    missing_certs = union("missing_certifications")
+
+    return {
+        "target_job": ", ".join(_unique([g["target_job"] for g in gaps])),
+        "matched_skills": union("matched_skills"),
+        "missing_required_skills": missing_required,
+        "missing_optional_skills": [
+            s for s in union("missing_optional_skills") if s not in missing_required
+        ],
+        "matched_certifications": union("matched_certifications"),
+        "missing_certifications": missing_certs,
+        "missing_optional_certifications": [
+            c for c in union("missing_optional_certifications") if c not in missing_certs
+        ],
+    }
+
+
+# ============================================================
 # GET SUPPORTED TARGET JOBS
 # ============================================================
 
@@ -217,6 +272,16 @@ def calculate_target_job_gap(
         ]
     }
     """
+
+    # --------------------------------------------------------
+    # Several titles ("A, B"): analyse each one, then merge.
+    # --------------------------------------------------------
+
+    titles = split_target_jobs(target_job)
+    if len(titles) > 1:
+        return merge_target_job_gaps(
+            [calculate_target_job_gap(t, resume) for t in titles]
+        )
 
     # --------------------------------------------------------
     # Resolve the submitted job title.
@@ -390,6 +455,16 @@ def calculate_target_job_gap_from_row(
 
     where the resume has already been parsed and stored.
     """
+
+    # --------------------------------------------------------
+    # Several titles ("A, B"): analyse each one, then merge.
+    # --------------------------------------------------------
+
+    titles = split_target_jobs(target_job)
+    if len(titles) > 1:
+        return merge_target_job_gaps(
+            [calculate_target_job_gap_from_row(t, row) for t in titles]
+        )
 
     # --------------------------------------------------------
     # Resolve the submitted target job.

@@ -90,13 +90,13 @@ function toResult(raw: Record<string, any>): AnalysisResult {
   };
 }
 
-async function analyzeResume({ file, jobTitle, companies, freelanceOnly }: UploadPayload): Promise<AnalysisResult> {
+async function analyzeResume({ file, jobTitle, companies, internshipOnly }: UploadPayload): Promise<AnalysisResult> {
   const body = new FormData();
   body.append('file', file);
   body.append('target_job', jobTitle);
   body.append('target_companies', companies);
-  // Form field read by POST /api/analyze in the backend; true = freelance postings only.
-  body.append('freelance_only', String(freelanceOnly ?? false));
+  // Form field read by POST /api/analyze in the backend; true = internship postings only.
+  body.append('internship_only', String(internshipOnly ?? false));
 
   // Use the same field names and Authorization header as the fetch in your current
   // loading page — this goes through the Next.js proxy at app/api/analyze/route.ts.

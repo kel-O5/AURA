@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useId, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Building2, ChevronDown, Check, Plus } from 'lucide-react';
+import { X, Building2, ChevronDown, Check, Plus, Sparkles } from 'lucide-react';
 
 // IT / tech employers offered as suggestions (reference list). The field is
 // free-text: anything typed that isn't on this list can still be added.
@@ -23,8 +23,9 @@ interface CompanySelectorProps {
 // bounding box rather than CSS `absolute` positioning.
 type MenuRect = { top: number; left: number; width: number };
 
-// One row in the dropdown: a company from the reference list, or "add what I typed".
-type Option = { kind: 'company' | 'custom'; name: string };
+// One row in the dropdown: "Any" (no specific company), a company from the
+// reference list, or "add what I typed".
+type Option = { kind: 'any' | 'company' | 'custom'; name: string };
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -39,7 +40,7 @@ export default function CompanySelector({
   onSelectionChange,
   disabled = false,
   label = 'Target Companies',
-  placeholder = 'Type or select target companies',
+  placeholder = 'Any company, or type to add',
 }: CompanySelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -71,7 +72,12 @@ export default function CompanySelector({
   const invalidName = q.length > 0 && !exists && !validCustom;
   const canAddCustom = q.length > 0 && !exists && validCustom && !limitReached;
 
+  // "Any" = no specific company = an empty selection. It is only offered while
+  // nothing is typed, so it never gets in the way of searching the list.
+  const anySelected = selectedCompanies.length === 0;
+
   const options: Option[] = [
+    ...(q === '' ? [{ kind: 'any' as const, name: 'Any' }] : []),
     ...matches.map((name) => ({ kind: 'company' as const, name })),
     ...(canAddCustom ? [{ kind: 'custom' as const, name: q }] : []),
   ];
@@ -141,6 +147,12 @@ export default function CompanySelector({
   };
 
   const choose = (option: Option, viaKeyboard = false) => {
+    if (option.kind === 'any') {
+      // Clears every selected company; leaving the field empty means "Any".
+      onSelectionChange([]);
+      close();
+      return;
+    }
     if (option.kind === 'custom') addCustom(option.name);
     // Typing an already-selected company and pressing Enter keeps it (no duplicate, no removal).
     else if (viaKeyboard && q && isSelected(option.name)) {
@@ -324,12 +336,15 @@ export default function CompanySelector({
                     className="max-h-64 overflow-y-auto py-2"
                   >
                     {options.map((option, index) => {
-                      const selected = option.kind === 'company' && isSelected(option.name);
+                      const selected =
+                        option.kind === 'any'
+                          ? anySelected
+                          : option.kind === 'company' && isSelected(option.name);
                       const highlighted = index === active;
 
                       return (
+                        <div key={`${option.kind}-${option.name}`}>
                         <button
-                          key={`${option.kind}-${option.name}`}
                           id={`${listId}-opt-${index}`}
                           type="button"
                           role="option"
@@ -341,14 +356,21 @@ export default function CompanySelector({
                           className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-[13px] transition-colors ${
                             highlighted ? 'bg-[#7c3aed]/[0.06]' : ''
                           } ${
-                            option.kind === 'custom'
-                              ? 'font-semibold text-[#7c3aed]'
+                            option.kind === 'custom' || option.kind === 'any'
+                              ? option.kind === 'any' && !selected
+                                ? 'text-[#4b5563]'
+                                : 'font-semibold text-[#7c3aed]'
                               : selected
                                 ? 'font-semibold text-[#7c3aed]'
                                 : 'text-[#4b5563]'
                           }`}
                         >
-                          {option.kind === 'custom' ? (
+                          {option.kind === 'any' ? (
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Sparkles className="size-3.5 shrink-0 text-[#9ca3af]" />
+                              <span className="truncate">Any (no specific company)</span>
+                            </span>
+                          ) : option.kind === 'custom' ? (
                             <span className="flex min-w-0 items-center gap-2">
                               <Plus className="size-4 shrink-0" />
                               <span className="truncate">Add &ldquo;{option.name}&rdquo;</span>
@@ -358,6 +380,8 @@ export default function CompanySelector({
                           )}
                           {selected && <Check className="size-4 shrink-0" />}
                         </button>
+                        {option.kind === 'any' && <div className="mx-4 my-1 h-px bg-[#e5e7eb]" />}
+                        </div>
                       );
                     })}
 

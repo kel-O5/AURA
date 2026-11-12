@@ -230,6 +230,7 @@ class JobScorer:
         target_description: Optional[str] = None,
         target_job: str = "",
         search_terms: Optional[List[str]] = None,
+        target_jobs: Optional[List[str]] = None,
     ):
         self.resume   = resume
         self.keywords = [kw.lower() for kw in keywords]
@@ -243,6 +244,12 @@ class JobScorer:
         # The (IT) job title the user picked on the upload form. Used by
         # _title_score so listings whose title matches it rank first.
         self.target_title_words = _title_words(target_job)
+
+        # Several titles can be selected on the upload form. A listing earns the
+        # title boost from whichever chosen title it matches best. Falls back to
+        # the single `target_job` when `target_jobs` isn't given.
+        title_list = [t for t in (target_jobs or []) if t and t.strip()] or ([target_job] if target_job else [])
+        self.target_title_sets = [w for w in (_title_words(t) for t in title_list) if w]
 
         # Pre-compute resume token sets once so each per-job scoring
         # call below doesn't have to redo this work.
@@ -460,8 +467,9 @@ class JobScorer:
         # Target-job boost: if the user picked a target title, a listing
         # whose title contains that title's words earns up to the full 10 pts
         # (e.g. target "Backend Developer" vs "Senior Backend Developer" = 10).
-        if self.target_title_words:
-            hit = len(self.target_title_words & _title_words(job.title)) / len(self.target_title_words)
+        if self.target_title_sets:
+            job_words = _title_words(job.title)
+            hit = max(len(words & job_words) / len(words) for words in self.target_title_sets)
             score = max(score, hit * 10)
 
         return round(min(score, 10.0), 2)

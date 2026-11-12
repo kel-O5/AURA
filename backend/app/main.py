@@ -72,7 +72,6 @@ NOTES / THINGS WORTH DOUBLE-CHECKING
   format/level is controlled in one place for the whole app.
 """
 
-import json
 import os
 import threading
 
@@ -144,35 +143,12 @@ app.include_router(resumes_router, prefix="/api")
 app.include_router(analysis_history_router, prefix="/api")
 
 
-
-def _normalize_companies(raw: str) -> str:
-    """
-    Accepts target_companies as a JSON list ('["Amazon","Apple"]') OR as a
-    plain comma/newline-separated string ('Amazon, Apple') and always hands
-    handle_analyze a JSON list string. The frontend currently sends the plain
-    form, which the controller could not parse (so company targeting was ignored).
-    """
-    raw = (raw or "").strip()
-    if not raw:
-        return "[]"
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return json.dumps([str(x).strip() for x in parsed if str(x).strip()])
-        if isinstance(parsed, str):
-            raw = parsed
-    except (ValueError, TypeError):
-        pass
-    names = [n.strip() for n in raw.replace("\n", ",").split(",") if n.strip()]
-    return json.dumps(names)
-
-
 @app.post("/api/analyze")
 async def analyze_resume(
     file: UploadFile = File(...),
     target_job: str = Form(default=""),
     target_companies: str = Form(default="[]"),
-    freelance_only: bool = Form(default=False),
+    internship_only: bool = Form(default=False),
     user: AuthUser = Depends(get_current_user),
 ):
     """
@@ -180,17 +156,16 @@ async def analyze_resume(
 
     - `file`: the uploaded resume (PDF/DOCX — validated later by
       file_handler.validate_file inside the controller/parsing flow).
-    - `target_job`: optional free-text job title/description the user
-      is targeting, used to focus the analysis. Also now used to look
-      up a role-specific skill checklist — see
+    - `target_job`: optional IT job title(s), comma-separated when several
+      are chosen ("Backend Developer, Data Engineer"). Blank = Any. Also
+      used to look up a role-specific skill checklist — see
       app/services/target_job_matcher.py.
-    - `target_companies`: optional JSON-encoded list of company names
-      the user is interested in (comes in as a raw string since this
-      is a multipart form field, not JSON body — gets parsed inside
-      handle_analyze).
-    - `freelance_only`: optional flag (form field, "true"/"false"). When
-      true, JSearch is queried for freelance postings only — see
-      JSearchClient.fetch_jobs(freelance_only=...).
+    - `target_companies`: optional company names, comma-separated (a JSON
+      list is accepted too). Blank = Any. Comes in as a raw string since
+      this is a multipart form field — parsed inside handle_analyze.
+    - `internship_only`: optional flag (form field, "true"/"false"). When
+      true, JSearch is queried for internship postings only — see
+      JSearchClient.fetch_jobs(internship_only=...).
     - `user`: injected by the `get_current_user` dependency, which
       runs BEFORE this function body — so unauthenticated requests
       never reach handle_analyze at all. `user.id` is now passed
@@ -202,9 +177,9 @@ async def analyze_resume(
     return await handle_analyze(
         file,
         target_job,
-        _normalize_companies(target_companies),
+        target_companies,
         user_id=user.id,
-        freelance_only=freelance_only,
+        internship_only=internship_only,
     )
 
 

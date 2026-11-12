@@ -82,6 +82,9 @@ from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
 from app.data.it_domain import is_it_title, canonical_it_title
 from app.data.job_requirements import JOB_REQUIREMENTS
+
+# Most job titles a user may select at once (mirrors JobTitleSelector's maxSelections).
+MAX_TARGET_JOBS = 3
 from app.utils.logger import logger
 
 
@@ -1503,13 +1506,44 @@ def _shape_certifications(
 # HANDLE ANALYZE
 # ==============================================================================
 
+def _parse_target_companies(raw: str | None) -> list[str]:
+    """
+    Target companies arrive as ONE multipart form string. The dashboard sends
+    them comma-separated ("Jollibee, Nintendo"); older callers send a JSON list
+    ('["Jollibee", "Nintendo"]'). Accept both. Blank = "Any" company -> [].
+    Company names can't contain commas (the form's name check blocks them).
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+
+    items: list = []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            items = parsed
+        elif isinstance(parsed, str):
+            items = parsed.split(",")
+    except (json.JSONDecodeError, TypeError):
+        items = text.split(",")
+
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        name = str(item).strip()
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            cleaned.append(name)
+    return cleaned[:10]
+
+
 async def handle_analyze(
     file: UploadFile,
     target_job: str,
     target_companies: str,
     job_description: str = "",
     user_id: str | None = None,
-    freelance_only: bool = False,
+    internship_only: bool = False,
 ) -> dict:
 
     # ==========================================================================
@@ -1531,49 +1565,48 @@ async def handle_analyze(
     # title is still allowed (the search then runs from the resume keywords).
     # ==========================================================================
 
-    target_job = (target_job or "").strip()
+    # `target_job` may now hold several titles, comma-separated
+    # ("Backend Developer, Data Engineer"), because the Upload form allows a
+    # multi-select. Blank still means "Any" (search from the resume keywords).
+    # Assumes no supported title itself contains a comma.
+    target_jobs: list[str] = []
 
-    if target_job:
-        if not is_it_title(target_job):
+    for raw_title in (target_job or "").split(","):
+        title = raw_title.strip()
+        if not title:
+            continue
+
+        if not is_it_title(title):
             raise HTTPException(
                 status_code=422,
                 detail=(
                     "Aura currently supports IT roles only. "
-                    "Please choose a job title from the IT list."
+                    "Please choose job titles from the IT list."
                 ),
             )
+
         # Store/search the canonical spelling when it is one of the dropdown titles.
-        target_job = canonical_it_title(target_job) or target_job
+        canonical = canonical_it_title(title) or title
+        if canonical not in target_jobs:
+            target_jobs.append(canonical)
+
+    if len(target_jobs) > MAX_TARGET_JOBS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Please choose at most {MAX_TARGET_JOBS} job titles.",
+        )
+
+    # `target_job` is the PRIMARY (first) title, kept for logging and callers
+    # that take one title. Matching, scoring and the skill-gap checklist use the
+    # whole selection; `target_job_label` is what gets saved with the resume.
+    target_job = target_jobs[0] if target_jobs else ""
+    target_job_label = ", ".join(target_jobs)
 
     # ==========================================================================
     # STEP 2: PARSE TARGET COMPANIES
     # ==========================================================================
 
-    try:
-
-        target_companies_list = (
-            json.loads(target_companies)
-            if target_companies
-            else []
-        )
-
-        if not isinstance(
-            target_companies_list,
-            list,
-        ):
-            target_companies_list = []
-
-    except (
-        json.JSONDecodeError,
-        TypeError,
-    ):
-
-        logger.warning(
-            "Could not parse target_companies JSON: %r",
-            target_companies,
-        )
-
-        target_companies_list = []
+    target_companies_list = _parse_target_companies(target_companies)
 
     # ==========================================================================
     # STEP 3: READ FILE
@@ -1647,7 +1680,8 @@ async def handle_analyze(
             target_job=target_job,
             target_job_description=job_description,
             target_companies=target_companies_list,
-            freelance_only=freelance_only,
+            internship_only=internship_only,
+            target_jobs=target_jobs,
         )
 
     except ValueError as e:
@@ -1721,17 +1755,17 @@ async def handle_analyze(
     # ==========================================================================
 
     target_job_gap = calculate_target_job_gap(
-        target_job,
+        target_job_label,
         parsed,
     )
 
-    if target_job and target_job_gap is None:
+    if target_job_label and target_job_gap is None:
         # A valid IT title with no entry in job_requirements.py: the gap
         # checklist is skipped and skill gaps come from the job posting /
         # taxonomy fallback instead.
         logger.info(
-            "No job_requirements entry for IT target job %r — skipping target-job gap.",
-            target_job,
+            "No job_requirements entry for IT target job(s) %r — skipping target-job gap.",
+            target_job_label,
         )
 
     # ==========================================================================
@@ -1822,7 +1856,7 @@ async def handle_analyze(
         filename=file.filename or "upload",
         user_id=user_id,
         file_size_kb=file_size_kb,
-        target_job=target_job,
+        target_job=target_job_label,
         target_companies=target_companies_list,
     )
 

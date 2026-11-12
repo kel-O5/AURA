@@ -7,12 +7,10 @@ import { FileText, Loader2, UploadCloud, X } from 'lucide-react';
 
 import CompanySelector from './CompanySelector';
 import JobTitleSelector from './JobTitleSelector';
-import { SUPPORTED_JOB_TITLES } from '@/features/dashboard/data/supportedJobs';
+import InternshipToggle from './InternshipToggle';
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB, as shown in the Figma copy
 const ALLOWED_EXT = /\.(pdf|docx)$/i;
-// The job title can only be picked from this list (see JobTitleSelector).
-const SUPPORTED_TITLES: readonly string[] = SUPPORTED_JOB_TITLES;
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -20,10 +18,13 @@ const BTN_MOTION =
 
 export type UploadPayload = {
   file: File;
+  /** Selected job titles joined with ", ". Empty string = "Any". */
   jobTitle: string;
+  /** The same titles as a list. Empty array = "Any". */
+  jobTitles: string[];
   companies: string;
-  /** True = search freelance postings only (sent to the API as `freelance_only`). */
-  freelanceOnly?: boolean;
+  /** True = search internship postings only (sent to the API as `internship_only`). */
+  internshipOnly?: boolean;
 };
 
 type Props = {
@@ -43,9 +44,10 @@ function formatSize(bytes: number) {
 export default function Upload({ onAnalyze, isAnalyzing = false, error = null }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [jobTitle, setJobTitle] = useState('');
+  // Empty array = "Any" job title (no specific role chosen).
+  const [jobTitles, setJobTitles] = useState<string[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
-  const [freelanceOnly, setFreelanceOnly] = useState(false);
+  const [internshipOnly, setInternshipOnly] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -96,18 +98,16 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       setFileError('Please choose a resume to upload.');
       return;
     }
-    // Job title is optional, but if given it must be one of the listed roles.
-    // The selector already blocks typing; this is a second guard so an unlisted
-    // title can never start the analysis.
-    const title = jobTitle.trim();
-    if (title && !SUPPORTED_TITLES.includes(title)) {
-      setJobTitle('');
-      setFileError('Please select a job title from the list.');
-      return;
-    }
-
-    // The API expects a comma-separated string
-    onAnalyze({ file, jobTitle: title, companies: companies.join(', '), freelanceOnly });
+    // Job titles are optional. JobTitleSelector is select-only, so every title in
+    // `jobTitles` is already a supported role; an empty list means "Any".
+    // The API expects comma-separated strings (same as companies).
+    onAnalyze({
+      file,
+      jobTitle: jobTitles.join(', '),
+      jobTitles,
+      companies: companies.join(', '),
+      internshipOnly,
+    });
   };
 
   const shownError = fileError ?? error;
@@ -209,9 +209,9 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <JobTitleSelector
-            value={jobTitle}
+            value={jobTitles}
             onChange={(value) => {
-              setJobTitle(value);
+              setJobTitles(value);
               setFileError(null);
             }}
             disabled={isAnalyzing}
@@ -224,26 +224,8 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
           />
         </div>
 
-        {/* Freelance-only toggle: off = all job types (freelance postings included) */}
-        <label
-          className={`flex items-start gap-3 rounded-[14px] border border-[#e5e7eb] bg-white/[0.63] px-4 py-3 ${
-            isAnalyzing ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
-          }`}
-        >
-          <input
-            type="checkbox"
-            checked={freelanceOnly}
-            onChange={(e) => setFreelanceOnly(e.target.checked)}
-            disabled={isAnalyzing}
-            className="mt-0.5 size-4 accent-[#7c3aed]"
-          />
-          <span className="flex flex-col gap-0.5">
-            <span className="text-[14px] font-semibold text-[#111827]">Freelance jobs only</span>
-            <span className="text-[12px] text-[#4b5563]">
-              Search freelance postings only. Leave off to see all job types, freelance included.
-            </span>
-          </span>
-        </label>
+        {/* Internships-only switch: off = all job types (freelance postings included) */}
+        <InternshipToggle checked={internshipOnly} onChange={setInternshipOnly} disabled={isAnalyzing} />
 
         {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
         <button

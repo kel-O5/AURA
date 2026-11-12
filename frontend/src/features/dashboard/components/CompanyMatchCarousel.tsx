@@ -67,19 +67,20 @@ const PH_LOCATIONS = [
   'Remote',
 ];
 
-// The four job types offered in the Job Type filter.
-const JOB_TYPE_OPTIONS = ['Full-time', 'Part-time', 'Contractual', 'Freelance'] as const;
+// The five job types offered in the Job Type filter.
+const JOB_TYPE_OPTIONS = ['Full-time', 'Part-time', 'Contractual', 'Freelance', 'Internship'] as const;
 
 // Maps whatever the backend sends (e.g. "Full-time", "FULLTIME", "Part time",
-// "CONTRACTOR", "Contract", "Freelancer") onto one of the four options above,
-// so the filter still matches when the wording differs. Returns null for
-// anything else (e.g. "Internship"); those only show under "All Job Types".
+// "CONTRACTOR", "Contract", "Freelancer", "INTERN") onto one of the five options
+// above, so the filter still matches when the wording differs. Returns null for
+// anything else; those only show under "All Job Types".
 function toJobTypeOption(raw: string): (typeof JOB_TYPE_OPTIONS)[number] | null {
   const text = raw.toLowerCase().replace(/[^a-z]/g, '');
   if (text.includes('fulltime')) return 'Full-time';
   if (text.includes('parttime')) return 'Part-time';
   if (text.includes('contract')) return 'Contractual';
   if (text.includes('freelance')) return 'Freelance';
+  if (text.startsWith('intern')) return 'Internship'; // "intern", "internship"
   return null;
 }
 
