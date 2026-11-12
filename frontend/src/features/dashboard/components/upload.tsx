@@ -2,8 +2,11 @@
 
 'use client';
 
-import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
-import { FileText, Loader2, UploadCloud, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
+import Link from 'next/link';
+import { AnimatePresence, motion } from 'motion/react';
+import { Check, FileText, Loader2, ShieldCheck, UploadCloud, X } from 'lucide-react';
 
 import CompanySelector from './CompanySelector';
 import JobTitleSelector from './JobTitleSelector';
@@ -41,6 +44,196 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// ADDED: data privacy / data collection notice shown when the user presses
+// "Upload Resume". The analysis only starts after "Agree & Analyze".
+const PRIVACY_POINTS: { title: string; text: string }[] = [
+  {
+    title: 'What we collect',
+    text: 'Your resume file (PDF or DOCX), including the contact details, work experience, education and skills it contains, plus the target job titles and companies you selected.',
+  },
+  {
+    title: 'Why we collect it',
+    text: 'To generate your ATS score, keyword and skill recommendations, company matches and formatting insights. Nothing else.',
+  },
+  {
+    title: 'How it is protected',
+    text: 'Your resume is encrypted while it is sent and while it is stored, and only your signed-in account can access it.',
+  },
+  {
+    title: 'Who sees it',
+    text: 'We do not sell or rent your resume. It is shared only with the service providers needed to run the analysis, or when the law requires it.',
+  },
+  {
+    title: 'Your control',
+    text: 'You can download or delete your resumes and analysis history from your account at any time.',
+  },
+];
+
+function PrivacyConsentDialog({
+  open,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  // Portals need `document`, which doesn't exist during SSR. A portal is also
+  // required here: the Upload card uses `backdrop-blur`, which would trap a
+  // `position: fixed` dialog inside the card instead of covering the page.
+  const [mounted, setMounted] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    confirmRef.current?.focus();
+
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCancel();
+        return;
+      }
+      // Keep Tab inside the dialog.
+      if (e.key === 'Tab' && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+  }, [open, onCancel]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          {/* Backdrop: clicking it cancels */}
+          <div
+            aria-hidden="true"
+            onClick={onCancel}
+            className="absolute inset-0 bg-[#111827]/45 backdrop-blur-[2px]"
+          />
+
+          <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="privacy-consent-title"
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            className="relative flex max-h-[90dvh] w-full max-w-[520px] flex-col gap-5 overflow-y-auto rounded-[24px] border-[1.5px] border-white bg-white p-6 shadow-[0_24px_60px_rgba(17,24,39,0.25)] sm:p-8"
+          >
+            {/* Header */}
+            <div className="flex items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] border border-[#7c3aed]/20 bg-[#7c3aed]/[0.08]">
+                <ShieldCheck className="size-5 text-[#7c3aed]" />
+              </span>
+              <div className="flex min-w-0 flex-col gap-[2px]">
+                <h2 id="privacy-consent-title" className="text-[20px] font-extrabold leading-tight text-[#111827]">
+                  Data Privacy &amp; Data Collection
+                </h2>
+                <p className="text-[13px] text-[#4b5563]">Please review before we analyze your resume.</p>
+              </div>
+            </div>
+
+            <div className="h-px w-full bg-[linear-gradient(90deg,rgba(124,58,237,0.2)_0%,rgba(6,182,212,0.15)_60%,rgba(6,182,212,0)_100%)]" />
+
+            {/* What happens to the resume */}
+            <ul className="flex flex-col gap-3">
+              {PRIVACY_POINTS.map((point) => (
+                <li key={point.title} className="flex items-start gap-3">
+                  <span className="mt-[2px] flex size-5 shrink-0 items-center justify-center rounded-full bg-[#7c3aed]/[0.09]">
+                    <Check className="size-[10px] text-[#7c3aed]" strokeWidth={3} />
+                  </span>
+                  <p className="text-[13px] leading-[1.5] text-[#4b5563]">
+                    <span className="font-semibold text-[#111827]">{point.title}: </span>
+                    {point.text}
+                  </p>
+                </li>
+              ))}
+            </ul>
+
+            <p className="text-[12px] leading-[1.5] text-[#6b7280]">
+              By continuing, you acknowledge our{' '}
+              <Link
+                href="/privacy?from=dashboard"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#7c3aed] hover:underline"
+              >
+                Privacy Policy
+              </Link>{' '}
+              and{' '}
+              <Link
+                href="/terms-of-service?from=dashboard"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#7c3aed] hover:underline"
+              >
+                Terms of Service
+              </Link>
+              . They open in a new tab, so your upload is kept.
+            </p>
+
+            {/* Actions */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onCancel}
+                className={`rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#4b5563] ${BTN_MOTION} hover:bg-[#f9fafb]`}
+              >
+                Cancel
+              </button>
+              <button
+                ref={confirmRef}
+                type="button"
+                onClick={onConfirm}
+                className={`rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-6 py-[12px] text-[14px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
+              >
+                Agree &amp; Analyze
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+}
+
 export default function Upload({ onAnalyze, isAnalyzing = false, error = null }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -50,6 +243,9 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
   const [internshipOnly, setInternshipOnly] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  // ADDED: the data privacy notice that appears when "Upload Resume" is pressed.
+  const [consentOpen, setConsentOpen] = useState(false);
+  const closeConsent = useCallback(() => setConsentOpen(false), []);
 
   const openPicker = () => {
     if (!isAnalyzing) inputRef.current?.click();
@@ -93,11 +289,20 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
     setFileError(null);
   };
 
+  // Pressing "Upload Resume": check the file first, then show the data privacy
+  // notice. The analysis starts only when the user agrees (startAnalysis).
   const handleSubmit = () => {
+    if (isAnalyzing) return;
     if (!file) {
       setFileError('Please choose a resume to upload.');
       return;
     }
+    setConsentOpen(true);
+  };
+
+  const startAnalysis = () => {
+    setConsentOpen(false);
+    if (!file) return;
     // Job titles are optional. JobTitleSelector is select-only, so every title in
     // `jobTitles` is already a supported role; an empty list means "Any".
     // The API expects comma-separated strings (same as companies).
@@ -244,6 +449,8 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
           )}
         </button>
       </div>
+
+      <PrivacyConsentDialog open={consentOpen} onCancel={closeConsent} onConfirm={startAnalysis} />
     </div>
   );
 }

@@ -13,6 +13,9 @@
 //  - Email/password show "Invalid email", "Invalid password", or both.
 //  - Google / GitHub buttons are on this page (below the Create Account button).
 //  - Middle name is optional; only validated when filled in.
+//  - Every other field is marked required (red *), and the Terms of Service /
+//    Privacy Policy checkbox must be ticked before Create Account or the
+//    Google / GitHub buttons will go ahead.
 //  - Arriving from a Google/GitHub sign-in with no account
 //    (/signup?email=...&name=...&provider=...) prefills the form.
 
@@ -58,6 +61,17 @@ const DRAFT_KEY = 'aura_signup_draft';
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
   'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
+
+const TERMS_REQUIRED_MESSAGE = 'You must agree to the Terms of Service and Privacy Policy to continue';
+
+// Red asterisk shown after the label of every required field.
+function RequiredMark() {
+  return (
+    <span className="text-[#ef4444]" aria-hidden="true">
+      *
+    </span>
+  );
+}
 
 type Step = 'form' | 'otp';
 type Provider = 'google' | 'github';
@@ -130,6 +144,10 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Terms of Service / Privacy Policy checkbox (not saved in the draft: it must be
+  // ticked again after coming back from reading them).
+  const [agreed, setAgreed] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   const [firstNameError, setFirstNameError] = useState<string | null>(null);
   const [middleNameError, setMiddleNameError] = useState<string | null>(null);
@@ -236,8 +254,19 @@ export default function SignUp() {
     if (error) setError(null);
   };
 
+  // Blocks Google / GitHub sign-up until the Terms checkbox is ticked.
+  const requireTerms = (): boolean => {
+    if (agreed) return true;
+    setTermsError(TERMS_REQUIRED_MESSAGE);
+    const box = document.getElementById('signup-terms');
+    box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    box?.focus({ preventScroll: true });
+    return false;
+  };
+
   const handleOAuth = async (provider: Provider) => {
     if (oauthLoading || isSubmitting) return;
+    if (!requireTerms()) return;
     setError(null);
     setOauthLoading(provider);
     try {
@@ -276,6 +305,8 @@ export default function SignUp() {
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
     setConfirmError(nextConfirmError);
+    const nextTermsError = agreed ? null : TERMS_REQUIRED_MESSAGE;
+    setTermsError(nextTermsError);
 
     // Top message: empty form -> ask to fill it in; both filled but both bad ->
     // "Invalid email and password". Otherwise the field messages are enough.
@@ -289,14 +320,20 @@ export default function SignUp() {
           : null
     );
 
-    if (
+    const fieldsInvalid =
       nextFirstNameError ||
       nextMiddleNameError ||
       nextLastNameError ||
       nextEmailError ||
       nextPasswordError ||
-      nextConfirmError
-    ) {
+      nextConfirmError;
+    if (fieldsInvalid || nextTermsError) {
+      // Only the checkbox is missing: bring it into view so it is not overlooked.
+      if (!fieldsInvalid) {
+        const box = document.getElementById('signup-terms');
+        box?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        box?.focus({ preventScroll: true });
+      }
       return;
     }
 
@@ -386,10 +423,14 @@ export default function SignUp() {
             }}
           >
             <div className="flex flex-col gap-4">
+              <p className="text-[12px] text-[#6b7280]">
+                Fields marked <span className="text-[#ef4444]">*</span> are required.
+              </p>
+
               {/* First name */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-first-name" className="text-[13px] font-semibold text-[#4b5563]">
-                  First Name
+                  First Name <RequiredMark />
                 </label>
                 <div className={inputWrapperClass(!!firstNameError)}>
                   <input
@@ -401,6 +442,7 @@ export default function SignUp() {
                     value={firstName}
                     onChange={(e) => handleNameChange(e.target.value, setFirstName, setFirstNameError)}
                     aria-invalid={!!firstNameError}
+                    aria-required="true"
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                 </div>
@@ -431,7 +473,7 @@ export default function SignUp() {
               {/* Last name */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-last-name" className="text-[13px] font-semibold text-[#4b5563]">
-                  Last Name
+                  Last Name <RequiredMark />
                 </label>
                 <div className={inputWrapperClass(!!lastNameError)}>
                   <input
@@ -443,6 +485,7 @@ export default function SignUp() {
                     value={lastName}
                     onChange={(e) => handleNameChange(e.target.value, setLastName, setLastNameError)}
                     aria-invalid={!!lastNameError}
+                    aria-required="true"
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                 </div>
@@ -452,7 +495,7 @@ export default function SignUp() {
               {/* Email */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-email" className="text-[13px] font-semibold text-[#4b5563]">
-                  Email
+                  Email <RequiredMark />
                 </label>
                 <div className={inputWrapperClass(!!emailError)}>
                   <input
@@ -468,6 +511,7 @@ export default function SignUp() {
                       if (error) setError(null);
                     }}
                     aria-invalid={!!emailError}
+                    aria-required="true"
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                 </div>
@@ -486,7 +530,7 @@ export default function SignUp() {
               {/* Password */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-password" className="text-[13px] font-semibold text-[#4b5563]">
-                  Password
+                  Password <RequiredMark />
                 </label>
                 <div className={inputWrapperClass(!!passwordError)}>
                   <input
@@ -502,6 +546,7 @@ export default function SignUp() {
                       if (error) setError(null);
                     }}
                     aria-invalid={!!passwordError}
+                    aria-required="true"
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                   <button
@@ -520,7 +565,7 @@ export default function SignUp() {
               {/* Confirm password */}
               <div className="flex flex-col gap-[6px]">
                 <label htmlFor="signup-confirm" className="text-[13px] font-semibold text-[#4b5563]">
-                  Confirm Password
+                  Confirm Password <RequiredMark />
                 </label>
                 <div className={inputWrapperClass(!!confirmError)}>
                   <input
@@ -535,6 +580,7 @@ export default function SignUp() {
                       if (error) setError(null);
                     }}
                     aria-invalid={!!confirmError}
+                    aria-required="true"
                     className="min-w-0 flex-1 bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9ca3af]"
                   />
                 </div>
@@ -548,27 +594,50 @@ export default function SignUp() {
               )}
             </div>
 
-            {/* Terms acknowledgement + Notice at Collection (also covers the Google/GitHub buttons) */}
-            <div className="flex flex-col gap-2 rounded-[10px] border border-[#e5e7eb] bg-white/60 px-3 py-3 text-[12px] leading-[1.5] text-[#4b5563]">
-              <p>
-                By creating an account, you confirm that you have read and agree to our{' '}
-                <Link
-                  href="/terms-of-service?from=signup"
-                  onClick={saveDraft}
-                  className="font-semibold text-[#7c3aed] hover:underline"
-                >
-                  Terms of Service
-                </Link>{' '}
-                and acknowledge our{' '}
-                <Link
-                  href="/privacy?from=signup"
-                  onClick={saveDraft}
-                  className="font-semibold text-[#7c3aed] hover:underline"
-                >
-                  Privacy Policy
-                </Link>
-                .
-              </p>
+            {/* Terms acknowledgement (REQUIRED checkbox) + Notice at Collection (also covers the Google/GitHub buttons) */}
+            <div
+              className={`flex flex-col gap-3 rounded-[10px] border bg-white/60 px-3 py-3 text-[12px] leading-[1.5] text-[#4b5563] ${
+                termsError ? 'border-[#ef4444]' : 'border-[#e5e7eb]'
+              }`}
+            >
+              <label htmlFor="signup-terms" className="flex cursor-pointer items-start gap-2">
+                <input
+                  id="signup-terms"
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => {
+                    setAgreed(e.target.checked);
+                    if (e.target.checked) setTermsError(null);
+                  }}
+                  aria-required="true"
+                  aria-invalid={!!termsError}
+                  className="mt-[2px] size-4 shrink-0 cursor-pointer accent-[#7c3aed]"
+                />
+                <span>
+                  I have read and agree to the{' '}
+                  <Link
+                    href="/terms-of-service?from=signup"
+                    onClick={saveDraft}
+                    className="font-semibold text-[#7c3aed] hover:underline"
+                  >
+                    Terms of Service
+                  </Link>{' '}
+                  and acknowledge the{' '}
+                  <Link
+                    href="/privacy?from=signup"
+                    onClick={saveDraft}
+                    className="font-semibold text-[#7c3aed] hover:underline"
+                  >
+                    Privacy Policy
+                  </Link>
+                  . <RequiredMark />
+                </span>
+              </label>
+              {termsError && (
+                <p role="alert" className="text-[12px] font-medium text-[#ef4444]">
+                  {termsError}
+                </p>
+              )}
               <p>
                 <span className="font-semibold text-[#111827]">Notice at Collection:</span> we collect
                 your name and email to create your account, and the resumes you upload (with your
