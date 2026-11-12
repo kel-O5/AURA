@@ -1,4 +1,4 @@
-// src/components/AssessmentSidebar.tsx
+// src/features/dashboard/components/AssessmentSidebar.tsx
 
 'use client';
 
@@ -61,9 +61,29 @@ const DIMENSION_DESCRIPTIONS: Record<string, string> = {
     'Checks whether your total word count falls in the optimal 400–800 word range for readability and ATS parsing.',
 };
 
+// A dimension scoring below this "meets" line gets a short "how to improve" tip
+// under its bar. Same cut-off getScoreSummary() uses for "Strong".
+const MEETS_SCORE = 70;
+
+// Improvement tips shown under a below-threshold dimension.
+// Matched by dimension name (case-insensitive); unknown names show no tip.
+const DIMENSION_TIPS: Record<string, string> = {
+  keywords:
+    'Reuse the exact skill and job-title wording from postings you are targeting, and work each key term into your experience bullets, not only the Skills list.',
+  format:
+    'Use standard headings (Summary, Experience, Skills, Education) and one bullet style, and avoid tables, columns, text boxes, or images that ATS parsers can misread.',
+  skills:
+    'Add more of the core tools and technologies for your target role to a dedicated Skills section, grouped by category (languages, frameworks, tools).',
+  impact:
+    'Start each bullet with a strong action verb and add numbers to show results, e.g. "reduced load time by 35%" or "served 200+ users".',
+  length:
+    'Aim for roughly 400–800 words: add specific accomplishments if the resume is short, or trim older and repetitive details if it is long.',
+};
+
 const normalize = (name: string) => name.trim().toLowerCase();
 const getWeight = (name: string): number | undefined => DIMENSION_WEIGHTS[normalize(name)];
 const getDescription = (name: string): string | undefined => DIMENSION_DESCRIPTIONS[normalize(name)];
+const getTip = (name: string): string | undefined => DIMENSION_TIPS[normalize(name)];
 
 const clampPercent = (n: number) => Math.min(100, Math.max(0, Number.isFinite(n) ? n : 0));
 
@@ -226,6 +246,23 @@ function DimensionRow({
         {Math.round(pct)}%
       </p>
     </div>
+  );
+}
+
+// Short "how to improve" note under a dimension that scores below MEETS_SCORE.
+function DimensionTip({ text, index = 0 }: { text: string; index?: number }) {
+  const reduceMotion = useReducedMotion();
+
+  return (
+    <motion.p
+      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.3, delay: reduceMotion ? 0 : 0.6 + index * 0.08 }}
+      className="mt-1.5 rounded-[10px] border border-[#a16207]/20 bg-[#fef9c3]/70 px-3 py-2 text-[12px] leading-[1.4] text-[#a16207]"
+    >
+      <span className="font-bold">How to improve: </span>
+      {text}
+    </motion.p>
   );
 }
 
@@ -469,14 +506,20 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
         </div>
 
         <div className="flex flex-col gap-4">
-          {rows.map((section, i) => (
-            <DimensionRow
-              key={`${section.name}-${hasResult ? score : 'none'}`}
-              name={section.name}
-              value={section.value}
-              index={i}
-            />
-          ))}
+          {rows.map((section, i) => {
+            // Only after analysis, and only for dimensions below the "meets" line.
+            const tip =
+              hasResult && section.value !== null && clampPercent(section.value) < MEETS_SCORE
+                ? getTip(section.name)
+                : undefined;
+
+            return (
+              <div key={`${section.name}-${hasResult ? score : 'none'}`} className="flex flex-col">
+                <DimensionRow name={section.name} value={section.value} index={i} />
+                {tip && <DimensionTip text={tip} index={i} />}
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -179,6 +179,25 @@ def build_search_terms(
     return terms
 
 
+# Aura is IT-only. With no target job, and no role the resume itself points to
+# (e.g. a marketing resume), bare resume skills like "Canva" or "Excel" only find
+# NON-IT postings. The IT filter then drops every one of them and the user gets
+# zero results. So in that case the search leads with these generic IT roles and
+# only tops up the query budget with resume skills. Tune the list freely.
+_DEFAULT_IT_ROLES = ["Software Developer", "IT Support", "Data Analyst"]
+
+
+def _with_default_it_roles(skill_terms: List[str], max_terms: int) -> List[str]:
+    terms: List[str] = []
+    seen: set[str] = set()
+    for t in _DEFAULT_IT_ROLES + list(skill_terms):
+        k = t.lower()
+        if t and k not in seen and len(terms) < max_terms:
+            seen.add(k)
+            terms.append(t)
+    return terms
+
+
 # Job types that have their own dashboard filter but rarely rank high enough to
 # reach it on score alone. Each gets reserved room in the results.
 _RESERVED_JOB_TYPES = ("Freelance", "Internship")
@@ -403,11 +422,20 @@ class JobMatcher:
                 keywords=jd_keywords + resume_keywords,
                 max_terms=self.max_keywords_queried,
             ) or list(keywords[:self.max_keywords_queried])
+            if not role and self.it_only:
+                # "Any" job title and nothing to infer from the resume: search
+                # generic IT roles first (see _DEFAULT_IT_ROLES).
+                search_terms = _with_default_it_roles(search_terms, self.max_keywords_queried)
+                logger.info("No role to search for; leading with generic IT roles: %s", search_terms)
 
         # Add a few company-steered queries so listings from the user's
         # named target companies have a real chance of showing up, even
         # if "data analyst" alone wouldn't have surfaced them.
-        top_term = _role_query(role) or (jd_keywords[0] if jd_keywords else (resume_keywords[0] if resume_keywords else None))
+        top_term = _role_query(role) or (
+            jd_keywords[0]
+            if jd_keywords
+            else (_DEFAULT_IT_ROLES[0] if self.it_only else (resume_keywords[0] if resume_keywords else None))
+        )
         if top_term:
             for company in target_companies[:3]:
                 company = company.strip()
