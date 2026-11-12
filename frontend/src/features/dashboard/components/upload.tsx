@@ -209,11 +209,11 @@ function PrivacyConsentDialog({
             </p>
 
             {/* Actions */}
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <div className="flex w-full flex-row gap-3">
               <button
                 type="button"
                 onClick={onCancel}
-                className={`rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#4b5563] ${BTN_MOTION} hover:bg-[#f9fafb]`}
+                className={`flex-1 rounded-full border border-[#e5e7eb] bg-white px-6 py-[12px] text-[14px] font-semibold text-[#4b5563] ${BTN_MOTION} hover:bg-[#f9fafb]`}
               >
                 Cancel
               </button>
@@ -221,7 +221,7 @@ function PrivacyConsentDialog({
                 ref={confirmRef}
                 type="button"
                 onClick={onConfirm}
-                className={`rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-6 py-[12px] text-[14px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
+                className={`flex-1 rounded-full bg-[linear-gradient(90deg,#7c3aed_0%,#a78bfa_60%,#06b6d4_100%)] px-6 py-[12px] text-[14px] font-bold text-white shadow-[0_8px_12px_rgba(124,58,237,0.2)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
               >
                 Agree &amp; Continue
               </button>
@@ -366,6 +366,9 @@ export default function Upload({ onAnalyze, isAnalyzing = false, error = null }:
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
+            // The input lives inside the clickable drop zone: without this, its own click
+            // bubbles up to the drop zone and re-opens the privacy notice.
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               acceptFile(e.target.files?.[0]);
               // Reset so choosing the same file again still fires onChange.
