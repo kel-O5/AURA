@@ -354,7 +354,7 @@ export default function CompanySelector({
                           onMouseEnter={() => setActiveIndex(index)}
                           onClick={() => choose(option)}
                           className={`flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-[13px] transition-colors ${
-                            highlighted ? 'bg-[#7c3aed]/[0.06]' : ''
+                            highlighted ? 'bg-[#7c3aed]/[0.05]' : ''
                           } ${
                             option.kind === 'custom' || option.kind === 'any'
                               ? option.kind === 'any' && !selected
@@ -376,9 +376,24 @@ export default function CompanySelector({
                               <span className="truncate">Add &ldquo;{option.name}&rdquo;</span>
                             </span>
                           ) : (
-                            <span className="truncate">{option.name}</span>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Building2 className="size-3.5 shrink-0 text-[#9ca3af]" />
+                              <span className="truncate">{option.name}</span>
+                            </span>
                           )}
-                          {selected && <Check className="size-4 shrink-0" />}
+                          {/* Same checkbox as the Target Job Title list ("Add ..." rows have none) */}
+                          {option.kind !== 'custom' && (
+                            <span
+                              aria-hidden
+                              className={`flex size-4 shrink-0 items-center justify-center rounded border ${
+                                selected
+                                  ? 'border-[#7c3aed] bg-[#7c3aed] text-white'
+                                  : 'border-[#d1d5db] bg-white'
+                              }`}
+                            >
+                              {selected && <Check className="size-3" strokeWidth={3} />}
+                            </span>
+                          )}
                         </button>
                         {option.kind === 'any' && <div className="mx-4 my-1 h-px bg-[#e5e7eb]" />}
                         </div>

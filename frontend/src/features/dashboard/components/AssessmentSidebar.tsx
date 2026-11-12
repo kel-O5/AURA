@@ -4,8 +4,8 @@
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, useReducedMotion } from 'motion/react';
-import { X } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { Lightbulb, X } from 'lucide-react';
 
 // `value` is null until a resume has been analyzed.
 interface SectionData {
@@ -249,20 +249,80 @@ function DimensionRow({
   );
 }
 
-// Short "how to improve" note under a dimension that scores below MEETS_SCORE.
-function DimensionTip({ text, index = 0 }: { text: string; index?: number }) {
+// Collapsed "how to improve" note for a dimension below MEETS_SCORE. It only
+// opens when the lightbulb button next to the score is clicked, so the score
+// list keeps its normal layout until the user asks for the tip.
+function DimensionTip({ id, text }: { id: string; text: string }) {
   const reduceMotion = useReducedMotion();
 
   return (
-    <motion.p
-      initial={reduceMotion ? false : { opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.3, delay: reduceMotion ? 0 : 0.6 + index * 0.08 }}
-      className="mt-1.5 rounded-[10px] border border-[#a16207]/20 bg-[#fef9c3]/70 px-3 py-2 text-[12px] leading-[1.4] text-[#a16207]"
+    <motion.div
+      id={id}
+      initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.25, ease: [0.22, 1, 0.36, 1] }}
+      className="overflow-hidden"
     >
-      <span className="font-bold">How to improve: </span>
-      {text}
-    </motion.p>
+      <p className="mt-1.5 rounded-[10px] border border-[#a16207]/20 bg-[#fef9c3]/70 px-3 py-2 text-[12px] leading-[1.4] text-[#a16207]">
+        <span className="font-bold">How to improve: </span>
+        {text}
+      </p>
+    </motion.div>
+  );
+}
+
+// One dimension: the normal score row, plus (after analysis) a fixed-width slot on
+// the right. Rows below MEETS_SCORE put a lightbulb button in that slot; the other
+// rows leave it empty, so every bar stays the same length and lined up.
+function DimensionItem({
+  name,
+  value,
+  index,
+  tip,
+  showSlot,
+}: {
+  name: string;
+  value: number | null;
+  index: number;
+  tip?: string;
+  showSlot: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const tipId = useId();
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <DimensionRow name={name} value={value} index={index} />
+        </div>
+
+        {showSlot && (
+          <div className="flex size-6 shrink-0 items-center justify-center">
+            {tip && (
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-controls={tipId}
+                aria-label={`${open ? 'Hide' : 'Show'} how to improve ${name}`}
+                title="How to improve"
+                className={`flex size-6 items-center justify-center rounded-full border border-[#a16207]/25 text-[#a16207] transition hover:bg-[#fde68a] ${
+                  open ? 'bg-[#fde68a] ring-2 ring-[#a16207]/20' : 'bg-[#fef9c3]'
+                }`}
+              >
+                <Lightbulb className="size-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence initial={false}>
+        {tip && open && <DimensionTip id={tipId} text={tip} />}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -514,10 +574,15 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
                 : undefined;
 
             return (
-              <div key={`${section.name}-${hasResult ? score : 'none'}`} className="flex flex-col">
-                <DimensionRow name={section.name} value={section.value} index={i} />
-                {tip && <DimensionTip text={tip} index={i} />}
-              </div>
+              // key includes the score so a new analysis closes any open tip
+              <DimensionItem
+                key={`${section.name}-${hasResult ? score : 'none'}`}
+                name={section.name}
+                value={section.value}
+                index={i}
+                tip={tip}
+                showSlot={hasResult}
+              />
             );
           })}
         </div>
