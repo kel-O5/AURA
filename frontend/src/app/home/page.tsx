@@ -192,7 +192,7 @@ const FAQ_LEFT = [
   {
     question: 'Is AURA free to use?',
     answer:
-      'Yes, you can upload and analyze your resume for an overall diagnostic score completely free of charge. Premium tier unlocks detailed recommendations.',
+      'Yes, you can upload and analyze your resume for an overall diagnostic score completely free of charge.',
   },
 ];
 
