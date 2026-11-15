@@ -41,7 +41,7 @@ const dmSans = DM_Sans({
 
 // Shown in the Contact section. (The contact form itself is emailed by the server, see
 // src/app/api/contact/route.ts, which reads its recipient from CONTACT_TO_EMAIL.)
-const CONTACT_EMAIL = 'hello@aura.ai';
+const CONTACT_EMAIL = 'analyzeaura@gmail.com';
 
 // ───────────── Shared styles ─────────────
 
