@@ -55,7 +55,7 @@ export default function KeywordSkillOptimization({
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h3 className="text-[18px] font-bold leading-tight text-[#111827]">
-            Keyword &amp; Skill Optimization
+            Keyword and Skill Optimization
           </h3>
           <p className="text-[13px] text-[#4b5563]">
             Mixed skills and keywords requested by your top five matched companies

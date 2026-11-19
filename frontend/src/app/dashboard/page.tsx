@@ -140,7 +140,7 @@ function saveResumesAnalyzed(count: number) {
   }
 }
 
-// One summary tile in the stats row ("Resumes Uploaded", "Jobs Targeted", "Match Score")
+// One summary tile in the stats row ("Resumes Uploaded", "Jobs Targeted", "Highest Match")
 // CHANGED: wrapped in <Reveal> (h-full keeps the tiles the same height in the row).
 function StatCard({
   label,
@@ -271,16 +271,14 @@ export default function DashboardPage() {
 
   const hasResult = result !== null;
 
-  // Highest individual company match %, when there are company matches to
-  // compare. Falls back to the resume's own overall ATS score so the tile
-  // never shows a bare "-" just because this particular analysis returned
-  // no company matches (e.g. a very niche target job/company list).
+  // Highest individual company match %. Shown as "-" when there are no company
+  // matches, instead of repeating the ATS score (a different metric) in this tile.
   const topCompanyMatch =
     result && result.companies.length > 0
       ? Math.round(Math.max(...result.companies.map((c) => c.match)))
       : null;
-  const matchScoreValue = topCompanyMatch ?? (result ? Math.round(result.ats_score) : null);
-  const matchScoreHint = topCompanyMatch !== null ? 'Top company fit' : 'Overall ATS score';
+  const matchScoreValue = topCompanyMatch;
+  const matchScoreHint = 'Top company fit';
 
   // Total job openings actually found for the latest analysis (the same
   // number JobListings' own header shows) — NOT the number of companies
@@ -333,9 +331,9 @@ export default function DashboardPage() {
             delay={0.25}
           />
           <StatCard
-            label="Match Score"
+            label="Highest Match"
             value={matchScoreValue !== null ? `${matchScoreValue}%` : '-'}
-            hint={matchScoreValue !== null ? matchScoreHint : 'No score yet'}
+            hint={matchScoreValue !== null ? matchScoreHint : 'No matches yet'}
             delay={0.35}
           />
         </div>

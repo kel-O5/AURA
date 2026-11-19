@@ -91,8 +91,8 @@ const SECTIONS: Section[] = [
   {
     title: 'Contact Information',
     content: [
-      'For questions about these Terms of Service, please contact our legal team.',
-      '• Email: legal@aura.co\n• Address: 456 Innovation Way, Suite 100, San Francisco, CA 94107',
+      'For questions about these Terms of Service, please contact the Aura team.',
+      '• Email: analyzeaura@gmail.com',
     ],
   },
 ];

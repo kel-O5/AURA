@@ -7,10 +7,15 @@ import { Lightbulb } from 'lucide-react';
 
 type SmartSuggestionsProps = {
   improvements: string[];
+  // Dashboard keeps the default; the History results page passes "Priority Improvements".
+  title?: string;
 };
 
 // Card displaying a list of suggested resume improvements, each marked with a lightbulb icon
-export default function SmartSuggestions({ improvements }: SmartSuggestionsProps) {
+export default function SmartSuggestions({
+  improvements,
+  title = 'Smart Suggestions',
+}: SmartSuggestionsProps) {
   // ADDED: respect the OS "reduce motion" setting
   const reduceMotion = useReducedMotion();
 
@@ -19,7 +24,7 @@ export default function SmartSuggestions({ improvements }: SmartSuggestionsProps
       {/* Header with lightbulb icon and title */}
       <div className="flex items-center gap-2">
         <Lightbulb className="size-[18px] shrink-0 text-[#f59e0b]" />
-        <p className="text-[14px] font-bold uppercase text-[#9ca3af]">Smart Suggestions</p>
+        <p className="text-[14px] font-bold uppercase text-[#9ca3af]">{title}</p>
       </div>
 
       {/* List of suggestions */}

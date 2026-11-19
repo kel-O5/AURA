@@ -99,7 +99,7 @@ export default function FormattingReadability({ grammarIssues }: FormattingReada
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h3 className="text-[18px] font-bold leading-tight text-[#111827]">
-            Formatting &amp; Readability
+            Formatting and Readability Checks
           </h3>
           <p className="text-[13px] text-[#4b5563]">
             Checking the visual flow and layout for clarity

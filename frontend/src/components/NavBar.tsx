@@ -202,8 +202,8 @@ export const Navbar = ({
       <div className="relative flex items-center justify-between gap-3 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-5 pr-3 py-3 sm:pl-6 sm:pr-3.5 sm:py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
         {/* Logo / brand link. The logo file lives in /public (Aura_LogoRaster.png). */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/Aura_LogoRaster.png" alt="" width={36} height={36} priority />
-          <span className="text-[24px] font-bold tracking-tight text-[#111827]">Aura</span>
+          <Image src="/Aura_LogoRaster.png" alt="" width={28} height={28} priority />
+          <span className="text-[22px] font-bold tracking-tight text-[#111827]">Aura</span>
         </Link>
 
         {/* Nav links in the middle on wide screens (lg and up). They sit in their own
@@ -320,7 +320,7 @@ export const Navbar = ({
               }}
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
-              className="lg:hidden flex size-10 shrink-0 items-center justify-center rounded-full text-[#111827] hover:bg-black/[0.05] transition-colors"
+              className="lg:hidden flex size-10 shrink-0 items-center justify-center rounded-full text-[#7c3aed] hover:bg-[#7c3aed]/10 transition-colors"
             >
               {isMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>

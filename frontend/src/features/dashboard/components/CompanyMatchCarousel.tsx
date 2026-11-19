@@ -178,7 +178,7 @@ function CompanyCard({ company, index }: { company: CompanyMatch; index: number 
           <span className="text-[24px] font-extrabold leading-none text-[#8b5cf6]">
             {matchPercent}%
           </span>
-          <span className="text-[10px] font-bold uppercase text-[#9ca3af]">Match Score</span>
+          <span className="text-[10px] font-bold uppercase text-[#9ca3af]">Company Match</span>
         </div>
       </div>
 

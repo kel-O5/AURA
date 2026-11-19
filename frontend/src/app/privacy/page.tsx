@@ -169,7 +169,7 @@ const SECTIONS: Section[] = [
       },
       {
         subtitle: 'Data Protection Officer:',
-        text: 'Email: privacy@aura.co\nAddress: 456 Innovation Way, Suite 100, San Francisco, CA 94107',
+        text: 'Email: analyzeaura@gmail.com',
       },
     ],
   },
