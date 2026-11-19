@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
   ArrowLeft,
+  Building2,
   Check,
   Download,
   FileText,
@@ -103,9 +104,16 @@ function getScore(value: unknown): number | null {
   for (const item of possible) {
     const parsed = Number(item);
 
-    if (Number.isFinite(parsed)) {
+    if (item !== null && item !== undefined && item !== '' && Number.isFinite(parsed)) {
       return Math.max(0, Math.min(100, parsed));
     }
+  }
+
+  // Saved jobs carry total_score (0-1 or 0-100), which is what the PDF prints.
+  const total = Number(value.total_score);
+
+  if (value.total_score != null && Number.isFinite(total)) {
+    return Math.round(Math.max(0, Math.min(100, total <= 1 ? total * 100 : total)));
   }
 
   return null;
@@ -340,10 +348,29 @@ function normalizeJobs(value: unknown): AnyRecord[] {
   return value.filter(isRecord);
 }
 
-export default function AnalysisHistoryDetailPage() {
-  const params = useParams<{ analysisId: string }>();
+// Fallback when useParams() has no id: parse it from the current URL.
+function idFromLocation(): string | undefined {
+  try {
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get('analysis') ?? url.searchParams.get('id');
+    if (fromQuery) return fromQuery;
 
-  const analysisId = params?.analysisId;
+    const parts = url.pathname.split('/').filter(Boolean);
+    const index = parts.indexOf('analysis-history');
+    const segment = index >= 0 ? parts[index + 1] : undefined;
+    return segment ? decodeURIComponent(segment) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export default function AnalysisHistoryDetailPage() {
+  // The folder may be named [analysisId] or [id]; read whichever one exists so the
+  // page never waits forever for a parameter that is named differently.
+  const params = useParams<Record<string, string | string[]>>();
+
+  const rawAnalysisId = params?.analysisId ?? params?.id ?? Object.values(params ?? {})[0];
+  const routeAnalysisId = Array.isArray(rawAnalysisId) ? rawAnalysisId[0] : rawAnalysisId;
 
   const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -361,9 +388,21 @@ export default function AnalysisHistoryDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!analysisId) return;
+    // If the route has no dynamic segment, read the ID straight from the address bar:
+    // /analysis-history/<id>, ?analysis=<id> or ?id=<id>.
+    const analysisId = routeAnalysisId ?? idFromLocation();
+
+    if (!analysisId) {
+      // No id in the URL: show an error instead of loading forever.
+      setError(`This analysis link is missing its ID (page URL: ${window.location.pathname}${window.location.search}).`);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    const controller = new AbortController();
+    // Give up after 30 seconds so a stuck request can never keep the spinner forever.
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
 
     async function loadAnalysis() {
       setLoading(true);
@@ -375,6 +414,7 @@ export default function AnalysisHistoryDetailPage() {
           {
             method: 'GET',
             cache: 'no-store',
+            signal: controller.signal,
           }
         );
 
@@ -451,12 +491,15 @@ export default function AnalysisHistoryDetailPage() {
 
         if (!cancelled) {
           setError(
-            err instanceof Error
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Loading this analysis took too long. Please try again.'
+              : err instanceof Error
               ? err.message
               : 'Unable to load this saved analysis.'
           );
         }
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) {
           setLoading(false);
         }
@@ -467,8 +510,10 @@ export default function AnalysisHistoryDetailPage() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
-  }, [analysisId]);
+  }, [routeAnalysisId]);
 
   const handleExport = () => {
     if (!analysis) return;
@@ -628,6 +673,31 @@ export default function AnalysisHistoryDetailPage() {
         ? Math.max(0, Math.min(100, section.value))
         : undefined,
   }));
+
+  // Top Company Matches: best five by score, same rule as the exported PDF.
+  const topCompanies = companies
+    .map((company) => ({
+      name: getName(company),
+      score: getScore(company),
+      reason: getDescription(company),
+    }))
+    .filter((company) => company.name)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+    .slice(0, 5);
+
+  // Feedback Report Summary: a written summary if one was saved, otherwise the
+  // same generated text the exported PDF uses.
+  const missingTermCount = mixedTerms.filter((t) => t.missing).length;
+  const writtenSummary = String(result.summary ?? result.feedback_summary ?? '').trim();
+  const bestCompany = topCompanies[0];
+  const feedbackSummary =
+    writtenSummary ||
+    `Your resume scored ${atsScore}% on ATS compatibility. ` +
+      `${strengths.length} key strength(s) and ${improvements.length} priority improvement(s) were identified` +
+      (missingTermCount ? `, with ${missingTermCount} keyword/skill gap(s) to close` : '') +
+      (bestCompany && bestCompany.score !== null
+        ? `. Your strongest company match is ${bestCompany.name} at ${Math.round(bestCompany.score)}%.`
+        : '.');
 
   return (
     <div className="min-h-screen relative bg-indigo-50 overflow-hidden">
@@ -825,7 +895,7 @@ export default function AnalysisHistoryDetailPage() {
                   </div>
 
                   <div className="text-gray-400 text-[9px] font-bold font-['DM_Sans'] uppercase">
-                    ATS score
+                    ATS Score
                   </div>
                 </div>
               </div>
@@ -916,101 +986,67 @@ export default function AnalysisHistoryDetailPage() {
         </div>
 
         {/* ========================= */}
-        {/* STRENGTHS / IMPROVEMENTS */}
+        {/* TOP COMPANY MATCHES */}
         {/* ========================= */}
 
-        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md flex flex-col gap-6">
-          <div className="flex items-center gap-3.5">
-            <div className="size-10 bg-amber-100 rounded-2xl outline outline-1 outline-amber-600/20 flex justify-center items-center">
-              <Lightbulb className="size-5 text-amber-600" />
+        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md">
+          <div className="flex items-center gap-3.5 mb-5">
+            <div className="size-10 bg-violet-500/10 rounded-2xl outline outline-1 outline-violet-500/20 flex justify-center items-center">
+              <Building2 className="size-5 text-violet-500" />
             </div>
 
             <div>
               <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Key Strengths &amp; Smart Suggestions
+                Top Company Matches
               </div>
 
               <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
-                The observations captured with this analysis
+                Companies that best fit this resume
               </div>
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-5">
-            {/* Strengths */}
-
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-4">
-              <div className="flex items-center gap-2.5">
-                <div className="size-7 bg-emerald-50 rounded-full flex justify-center items-center">
-                  <div className="text-emerald-500 text-xs font-extrabold font-['DM_Sans']">
-                    {strengths.length}
-                  </div>
-                </div>
-
-                <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                  Key strengths
-                </div>
-              </div>
-
-              {strengths.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  {strengths.map((strength, index) => (
-                    <div
-                      key={`${strength}-${index}`}
-                      className="flex items-start gap-2.5"
-                    >
-                      <Check className="size-4 mt-0.5 text-emerald-500 shrink-0" />
-
-                      <div className="flex-1 text-gray-600 text-xs font-normal font-['DM_Sans'] leading-5">
-                        {strength}
-                      </div>
+          {topCompanies.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {topCompanies.map((company, index) => (
+                <div
+                  key={`${company.name}-${index}`}
+                  className="p-4 bg-white/60 rounded-2xl outline outline-1 outline-white"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-gray-900 text-sm font-bold font-['DM_Sans']">
+                      {index + 1}. {company.name}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-gray-500 text-xs font-['DM_Sans']">
-                  No saved strengths were returned for this analysis.
-                </p>
-              )}
-            </div>
 
-            {/* Improvements */}
-
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-4">
-              <div className="flex items-center gap-2.5">
-                <div className="size-7 bg-amber-100 rounded-full flex justify-center items-center">
-                  <div className="text-amber-600 text-xs font-extrabold font-['DM_Sans']">
-                    {improvements.length}
-                  </div>
-                </div>
-
-                <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                  Priority improvements
-                </div>
-              </div>
-
-              {improvements.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  {improvements.map((improvement, index) => (
-                    <div
-                      key={`${improvement}-${index}`}
-                      className="flex items-start gap-2.5"
-                    >
-                      <TriangleAlert className="size-4 mt-0.5 text-amber-600 shrink-0" />
-
-                      <div className="flex-1 text-gray-600 text-xs font-normal font-['DM_Sans'] leading-5">
-                        {improvement}
+                    {company.score !== null && (
+                      <div className="px-2.5 py-[5px] bg-violet-500/10 rounded-full text-violet-500 text-xs font-bold font-['DM_Sans']">
+                        {Math.round(company.score)}% Match
                       </div>
+                    )}
+                  </div>
+
+                  {company.score !== null && (
+                    <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-violet-500 rounded-full"
+                        style={{ width: `${company.score}%` }}
+                      />
                     </div>
-                  ))}
+                  )}
+
+                  {company.reason && (
+                    <p className="mt-3 text-gray-600 text-xs font-normal font-['DM_Sans'] leading-5">
+                      {company.reason}
+                    </p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-gray-500 text-xs font-['DM_Sans']">
-                  No saved improvements were returned for this analysis.
-                </p>
-              )}
+              ))}
             </div>
-          </div>
+          ) : (
+            <p className="text-gray-500 text-xs font-['DM_Sans']">
+              No company matches were saved for this analysis.
+            </p>
+          )}
         </div>
 
         {/* ========================= */}
@@ -1026,7 +1062,7 @@ export default function AnalysisHistoryDetailPage() {
 
               <div>
                 <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                  Keyword &amp; Skill Optimization
+                  Keyword and Skill Optimization
                 </div>
 
                 <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1128,7 +1164,7 @@ export default function AnalysisHistoryDetailPage() {
 
             <div>
               <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Formatting &amp; Readability
+                Formatting and Readability Checks
               </div>
 
               <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1200,113 +1236,10 @@ export default function AnalysisHistoryDetailPage() {
         </div>
 
         {/* ========================= */}
-        {/* CERTIFICATIONS */}
-        {/* ========================= */}
-
-        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md flex flex-col gap-6">
-          <div className="flex items-center gap-3.5">
-            <div className="size-10 bg-violet-500/10 rounded-2xl outline outline-1 outline-violet-500/20 flex justify-center items-center">
-              <Sparkles className="size-5 text-violet-500" />
-            </div>
-
-            <div>
-              <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Certification Recommendations
-              </div>
-
-              <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
-                Suggestions preserved from this saved analysis
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-5">
-            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
-              <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                Certification recommendations
-              </div>
-
-              {certifications.length > 0 ? (
-                certifications.map((certification, index) => {
-                  const name =
-                    String(
-                      certification.full_name ??
-                        certification.name ??
-                        certification.title ??
-                        'Certification'
-                    );
-
-                  const provider = String(
-                    certification.provider ??
-                      certification.issuer ??
-                      ''
-                  );
-
-                  const url = String(
-                    certification.url ??
-                      certification.link ??
-                      ''
-                  );
-
-                  return (
-                    <div
-                      key={`${name}-${index}`}
-                      className="flex items-start gap-3"
-                    >
-                      <div className="size-8 bg-cyan-500/10 rounded-[10px] flex justify-center items-center shrink-0">
-                        <ShieldCheck className="size-4 text-cyan-500" />
-                      </div>
-
-                      <div className="flex-1 flex flex-col gap-0.5">
-                        <div className="flex justify-between items-center gap-2">
-                          {url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-gray-900 text-xs font-bold font-['DM_Sans'] hover:text-violet-500 transition"
-                            >
-                              {name}
-                            </a>
-                          ) : (
-                            <div className="text-gray-900 text-xs font-bold font-['DM_Sans']">
-                              {name}
-                            </div>
-                          )}
-
-                          <div className="px-2.5 py-[5px] bg-amber-100 rounded-full text-amber-600 text-xs font-bold font-['DM_Sans']">
-                            Recommended
-                          </div>
-                        </div>
-
-                        {provider && (
-                          <div className="text-gray-400 text-xs font-semibold font-['DM_Sans']">
-                            {provider}
-                          </div>
-                        )}
-
-                        <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
-                          Certification relevant to {targetJob}.
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-gray-500 text-xs font-['DM_Sans']">
-                  No certification recommendations were saved for this
-                  analysis.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ========================= */}
         {/* TOP JOBS */}
         {/* ========================= */}
 
-        {topJobs.length > 0 && (
+        {(
           <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md">
             <div className="flex items-center gap-3.5 mb-5">
               <div className="size-10 bg-cyan-500/10 rounded-2xl outline outline-1 outline-cyan-500/20 flex justify-center items-center">
@@ -1315,7 +1248,7 @@ export default function AnalysisHistoryDetailPage() {
 
               <div>
                 <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
-                  Matching Job Opportunities
+                  Matching Job Openings
                 </div>
 
                 <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
@@ -1323,6 +1256,12 @@ export default function AnalysisHistoryDetailPage() {
                 </div>
               </div>
             </div>
+
+            {topJobs.length === 0 && (
+              <p className="text-gray-500 text-xs font-['DM_Sans']">
+                No matching job openings were saved for this analysis.
+              </p>
+            )}
 
             <div className="grid md:grid-cols-2 gap-4">
               {topJobs.slice(0, 6).map((job, index) => {
@@ -1402,6 +1341,223 @@ export default function AnalysisHistoryDetailPage() {
             </div>
           </div>
         )}
+        {/* ========================= */}
+        {/* CERTIFICATIONS */}
+        {/* ========================= */}
+
+        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md flex flex-col gap-6">
+          <div className="flex items-center gap-3.5">
+            <div className="size-10 bg-violet-500/10 rounded-2xl outline outline-1 outline-violet-500/20 flex justify-center items-center">
+              <Sparkles className="size-5 text-violet-500" />
+            </div>
+
+            <div>
+              <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
+                Certification Recommendations
+              </div>
+
+              <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
+                Suggestions preserved from this saved analysis
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5">
+            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-3.5">
+              {certifications.length > 0 ? (
+                certifications.map((certification, index) => {
+                  const name =
+                    String(
+                      certification.full_name ??
+                        certification.name ??
+                        certification.title ??
+                        'Certification'
+                    );
+
+                  const provider = String(
+                    certification.provider ??
+                      certification.issuer ??
+                      ''
+                  );
+
+                  const url = String(
+                    certification.url ??
+                      certification.link ??
+                      ''
+                  );
+
+                  return (
+                    <div
+                      key={`${name}-${index}`}
+                      className="flex items-start gap-3"
+                    >
+                      <div className="size-8 bg-cyan-500/10 rounded-[10px] flex justify-center items-center shrink-0">
+                        <ShieldCheck className="size-4 text-cyan-500" />
+                      </div>
+
+                      <div className="flex-1 flex flex-col gap-0.5">
+                        <div className="flex justify-between items-center gap-2">
+                          {url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-gray-900 text-xs font-bold font-['DM_Sans'] hover:text-violet-500 transition"
+                            >
+                              {name}
+                            </a>
+                          ) : (
+                            <div className="text-gray-900 text-xs font-bold font-['DM_Sans']">
+                              {name}
+                            </div>
+                          )}
+
+                          <div className="px-2.5 py-[5px] bg-amber-100 rounded-full text-amber-600 text-xs font-bold font-['DM_Sans']">
+                            Recommended
+                          </div>
+                        </div>
+
+                        {provider && (
+                          <div className="text-gray-400 text-xs font-semibold font-['DM_Sans']">
+                            {provider}
+                          </div>
+                        )}
+
+                        <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
+                          Certification relevant to {targetJob}.
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-gray-500 text-xs font-['DM_Sans']">
+                  No certification recommendations were saved for this
+                  analysis.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ========================= */}
+        {/* STRENGTHS / IMPROVEMENTS */}
+        {/* ========================= */}
+
+        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md flex flex-col gap-6">
+          <div className="flex items-center gap-3.5">
+            <div className="size-10 bg-amber-100 rounded-2xl outline outline-1 outline-amber-600/20 flex justify-center items-center">
+              <Lightbulb className="size-5 text-amber-600" />
+            </div>
+
+            <div>
+              <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
+                Key Strengths and Priority Improvements
+              </div>
+
+              <div className="text-gray-600 text-xs font-normal font-['DM_Sans']">
+                The observations captured with this analysis
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-5">
+            {/* Strengths */}
+
+            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-4">
+              <div className="flex items-center gap-2.5">
+                <div className="size-7 bg-emerald-50 rounded-full flex justify-center items-center">
+                  <div className="text-emerald-500 text-xs font-extrabold font-['DM_Sans']">
+                    {strengths.length}
+                  </div>
+                </div>
+
+                <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
+                  Key Strengths
+                </div>
+              </div>
+
+              {strengths.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {strengths.map((strength, index) => (
+                    <div
+                      key={`${strength}-${index}`}
+                      className="flex items-start gap-2.5"
+                    >
+                      <Check className="size-4 mt-0.5 text-emerald-500 shrink-0" />
+
+                      <div className="flex-1 text-gray-600 text-xs font-normal font-['DM_Sans'] leading-5">
+                        {strength}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-xs font-['DM_Sans']">
+                  No saved strengths were returned for this analysis.
+                </p>
+              )}
+            </div>
+
+            {/* Improvements */}
+
+            <div className="p-5 bg-white/60 rounded-2xl outline outline-1 outline-white flex flex-col gap-4">
+              <div className="flex items-center gap-2.5">
+                <div className="size-7 bg-amber-100 rounded-full flex justify-center items-center">
+                  <div className="text-amber-600 text-xs font-extrabold font-['DM_Sans']">
+                    {improvements.length}
+                  </div>
+                </div>
+
+                <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
+                  Priority Improvements
+                </div>
+              </div>
+
+              {improvements.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {improvements.map((improvement, index) => (
+                    <div
+                      key={`${improvement}-${index}`}
+                      className="flex items-start gap-2.5"
+                    >
+                      <TriangleAlert className="size-4 mt-0.5 text-amber-600 shrink-0" />
+
+                      <div className="flex-1 text-gray-600 text-xs font-normal font-['DM_Sans'] leading-5">
+                        {improvement}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-xs font-['DM_Sans']">
+                  No saved improvements were returned for this analysis.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ========================= */}
+        {/* FEEDBACK REPORT SUMMARY */}
+        {/* ========================= */}
+
+        <div className="mt-6 p-7 bg-white/80 rounded-[20px] shadow-[0px_12px_34px_0px_rgba(17,24,39,0.04)] outline outline-[1.5px] outline-white backdrop-blur-md">
+          <div className="flex items-center gap-3.5 mb-4">
+            <div className="size-10 bg-violet-500/10 rounded-2xl outline outline-1 outline-violet-500/20 flex justify-center items-center">
+              <FileText className="size-5 text-violet-500" />
+            </div>
+
+            <div className="text-gray-900 text-lg font-bold font-['DM_Sans']">
+              Feedback Report Summary
+            </div>
+          </div>
+
+          <p className="text-gray-600 text-sm font-normal font-['DM_Sans'] leading-6">
+            {feedbackSummary}
+          </p>
+        </div>
+
       </main>
     </div>
   );
