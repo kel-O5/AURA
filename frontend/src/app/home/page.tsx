@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Fragment, useId, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState } from 'react';
 import Link from 'next/link';
 import { DM_Sans } from 'next/font/google';
 import {
@@ -19,7 +19,6 @@ import {
   Lightbulb,
   Lock,
   Mail,
-  Music2,
   Search,
   ShieldCheck,
   Sparkles,
@@ -40,7 +39,7 @@ const dmSans = DM_Sans({
 });
 
 // Shown in the Contact section and used as the recipient of the contact form.
-const CONTACT_EMAIL = 'hello@aura.ai';
+const CONTACT_EMAIL = 'analyzeaura@gmail.com';
 
 // ───────────── Shared styles ─────────────
 
@@ -211,50 +210,6 @@ const FAQ_RIGHT = [
     answer:
       "AURA analyzes your resume in under 30 seconds. You'll receive your ATS score, keyword gaps, and actionable suggestions almost instantly.",
   },
-];
-
-// ───────────── Brand glyphs ─────────────
-// lucide-react has no brand icons, so these are inlined SVGs sharing one set of props.
-const glyphProps = {
-  width: 16,
-  height: 16,
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 2,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-  'aria-hidden': true,
-};
-
-const InstagramGlyph = () => (
-  <svg {...glyphProps}>
-    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-  </svg>
-);
-
-const FacebookGlyph = () => (
-  <svg {...glyphProps}>
-    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
-  </svg>
-);
-
-const LinkedinGlyph = () => (
-  <svg {...glyphProps}>
-    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-    <rect x="2" y="9" width="4" height="12" />
-    <circle cx="4" cy="4" r="2" />
-  </svg>
-);
-
-// Music2 (TikTok stand-in) comes from lucide; the rest are the inline glyphs above.
-const SOCIALS: { glyph: ReactNode; tile: string; text: string }[] = [
-  { glyph: <InstagramGlyph />, tile: 'bg-[#fff0f5] text-[#e1306c]', text: '@aaboraura' },
-  { glyph: <FacebookGlyph />, tile: 'bg-[#eff6ff] text-[#1877f2]', text: 'AURA Resume' },
-  { glyph: <Music2 className="size-4" aria-hidden />, tile: 'bg-[#f3f4f6] text-[#111827]', text: '@aaboraura' },
-  { glyph: <LinkedinGlyph />, tile: 'bg-[#ecfeff] text-[#0a66c2]', text: 'AURA' },
 ];
 
 // ───────────── Section heading ─────────────
@@ -747,21 +702,6 @@ export default function HomePage() {
                   <a href={`mailto:${CONTACT_EMAIL}`} className="text-[15px] font-bold text-[#111827] hover:underline">
                     {CONTACT_EMAIL}
                   </a>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <p className="text-[12px] font-bold uppercase text-[#9ca3af]">Follow us</p>
-                <div className="flex flex-col gap-[10px]">
-                  {/* Index is part of the key because two handles share the same text */}
-                  {SOCIALS.map((social, i) => (
-                    <div key={`${social.text}-${i}`} className="flex items-center gap-[10px]">
-                      <span className={`flex size-8 items-center justify-center rounded-[8px] ${social.tile}`}>
-                        {social.glyph}
-                      </span>
-                      <span className="text-[14px] text-[#4b5563]">{social.text}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>

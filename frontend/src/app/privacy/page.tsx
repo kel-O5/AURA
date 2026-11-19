@@ -168,8 +168,8 @@ const SECTIONS: Section[] = [
         text: 'For general privacy questions, detailed data requests, or compliance inquiries, please get in touch with our security team:',
       },
       {
-        subtitle: 'Data Protection Officer:',
-        text: 'Email: analyzeaura@gmail.com',
+        subtitle: '',
+        text: '• Email: analyzeaura@gmail.com',
       },
     ],
   },
@@ -201,23 +201,6 @@ function ContentBlock({ text }: { text: string }) {
   }
 
   return <p className="whitespace-pre-line text-[15px] leading-[1.6] text-[#4b5563]">{text}</p>;
-}
-
-// Highlighted contact card (matches the Figma "Data Protection Officer" box).
-// Used for any content item that has a subtitle.
-function ContactBox({ subtitle, text }: { subtitle: string; text: string }) {
-  const lines = text.split('\n').filter((line) => line.trim() !== '');
-
-  return (
-    <div className="flex w-full flex-col gap-2 rounded-[12px] border border-[#7c3aed]/10 bg-[#7c3aed]/[0.03] p-4 text-[14px]">
-      <p className="font-bold text-[#7c3aed]">{subtitle}</p>
-      {lines.map((line, i) => (
-        <p key={i} className="break-words text-[#4b5563]">
-          {line.trim()}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 export default function PrivacyPolicyPage() {
@@ -303,15 +286,11 @@ export default function PrivacyPolicyPage() {
                     {/* Divider */}
                     <div className="h-px w-full bg-[linear-gradient(90deg,rgba(124,58,237,0.2)_0%,rgba(6,182,212,0.15)_60%,rgba(6,182,212,0)_100%)]" />
 
-                    {/* Section body: items with a subtitle render as a highlighted box */}
+                    {/* Section body */}
                     <div className="flex flex-col gap-4">
-                      {section.content.map((item, i) =>
-                        item.subtitle ? (
-                          <ContactBox key={i} subtitle={item.subtitle} text={item.text} />
-                        ) : (
-                          <ContentBlock key={i} text={item.text} />
-                        )
-                      )}
+                      {section.content.map((item, i) => (
+                        <ContentBlock key={i} text={item.text} />
+                      ))}
                     </div>
                   </section>
                 </Reveal>

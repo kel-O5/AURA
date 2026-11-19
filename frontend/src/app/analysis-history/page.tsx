@@ -349,9 +349,12 @@ function normalizeJobs(value: unknown): AnyRecord[] {
 }
 
 export default function AnalysisHistoryDetailPage() {
-  const params = useParams<{ analysisId: string }>();
+  // The folder may be named [analysisId] or [id]; read whichever one exists so the
+  // page never waits forever for a parameter that is named differently.
+  const params = useParams<Record<string, string | string[]>>();
 
-  const analysisId = params?.analysisId;
+  const rawAnalysisId = params?.analysisId ?? params?.id ?? Object.values(params ?? {})[0];
+  const analysisId = Array.isArray(rawAnalysisId) ? rawAnalysisId[0] : rawAnalysisId;
 
   const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -369,9 +372,17 @@ export default function AnalysisHistoryDetailPage() {
   }, []);
 
   useEffect(() => {
-    if (!analysisId) return;
+    if (!analysisId) {
+      // No id in the URL: show an error instead of loading forever.
+      setError('This analysis link is missing its ID.');
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    const controller = new AbortController();
+    // Give up after 30 seconds so a stuck request can never keep the spinner forever.
+    const timeout = window.setTimeout(() => controller.abort(), 30_000);
 
     async function loadAnalysis() {
       setLoading(true);
@@ -383,6 +394,7 @@ export default function AnalysisHistoryDetailPage() {
           {
             method: 'GET',
             cache: 'no-store',
+            signal: controller.signal,
           }
         );
 
@@ -459,12 +471,15 @@ export default function AnalysisHistoryDetailPage() {
 
         if (!cancelled) {
           setError(
-            err instanceof Error
+            err instanceof DOMException && err.name === 'AbortError'
+              ? 'Loading this analysis took too long. Please try again.'
+              : err instanceof Error
               ? err.message
               : 'Unable to load this saved analysis.'
           );
         }
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) {
           setLoading(false);
         }
@@ -475,6 +490,8 @@ export default function AnalysisHistoryDetailPage() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, [analysisId]);
 
