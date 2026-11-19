@@ -348,13 +348,29 @@ function normalizeJobs(value: unknown): AnyRecord[] {
   return value.filter(isRecord);
 }
 
+// Fallback when useParams() has no id: parse it from the current URL.
+function idFromLocation(): string | undefined {
+  try {
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get('analysis') ?? url.searchParams.get('id');
+    if (fromQuery) return fromQuery;
+
+    const parts = url.pathname.split('/').filter(Boolean);
+    const index = parts.indexOf('analysis-history');
+    const segment = index >= 0 ? parts[index + 1] : undefined;
+    return segment ? decodeURIComponent(segment) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export default function AnalysisHistoryDetailPage() {
   // The folder may be named [analysisId] or [id]; read whichever one exists so the
   // page never waits forever for a parameter that is named differently.
   const params = useParams<Record<string, string | string[]>>();
 
   const rawAnalysisId = params?.analysisId ?? params?.id ?? Object.values(params ?? {})[0];
-  const analysisId = Array.isArray(rawAnalysisId) ? rawAnalysisId[0] : rawAnalysisId;
+  const routeAnalysisId = Array.isArray(rawAnalysisId) ? rawAnalysisId[0] : rawAnalysisId;
 
   const [analysis, setAnalysis] = useState<SavedAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -372,9 +388,13 @@ export default function AnalysisHistoryDetailPage() {
   }, []);
 
   useEffect(() => {
+    // If the route has no dynamic segment, read the ID straight from the address bar:
+    // /analysis-history/<id>, ?analysis=<id> or ?id=<id>.
+    const analysisId = routeAnalysisId ?? idFromLocation();
+
     if (!analysisId) {
       // No id in the URL: show an error instead of loading forever.
-      setError('This analysis link is missing its ID.');
+      setError(`This analysis link is missing its ID (page URL: ${window.location.pathname}${window.location.search}).`);
       setLoading(false);
       return;
     }
@@ -493,7 +513,7 @@ export default function AnalysisHistoryDetailPage() {
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [analysisId]);
+  }, [routeAnalysisId]);
 
   const handleExport = () => {
     if (!analysis) return;
