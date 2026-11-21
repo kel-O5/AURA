@@ -12,7 +12,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { displayFont } from '@/lib/fonts';
 import Link from 'next/link';
 import AuraLogo from '@/components/AuraLogo';
 import { useRouter } from 'next/navigation';
@@ -234,7 +233,7 @@ export default function LoginPage() {
           {/* Form card */}
           <div className="flex w-full flex-col gap-6 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] px-6 py-9 shadow-[0_4px_16px_rgba(124,58,237,0.05),0_20px_60px_rgba(17,24,39,0.09)] backdrop-blur-[12px] sm:px-10">
             <div className="flex flex-col items-center gap-[6px] text-center">
-              <h1 className={`${displayFont.className} text-[32px] font-bold leading-tight tracking-[-0.01em] text-[#111827]`}>Welcome Back</h1>
+              <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Welcome Back</h1>
               <p className="text-[14px] text-[#4b5563]">Sign in to your AURA account</p>
             </div>
 

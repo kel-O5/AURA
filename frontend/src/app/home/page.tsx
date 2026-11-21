@@ -9,7 +9,6 @@
 import { Fragment, useId, useState } from 'react';
 import Link from 'next/link';
 import { DM_Sans } from 'next/font/google';
-import { displayFont } from '@/lib/fonts';
 import {
   ArrowRight,
   Brain,
@@ -235,7 +234,7 @@ function SectionHeader({
     <Reveal className="flex w-full justify-center">
       <div className="flex w-full max-w-[800px] flex-col items-center gap-4 text-center">
         <h2
-          className={`${displayFont.className} font-bold leading-[1.2] tracking-[-0.01em] text-[#111827] ${
+          className={`font-extrabold leading-[1.2] text-[#111827] ${
             size === 'lg' ? 'text-[32px] sm:text-[40px]' : 'text-[26px] sm:text-[32px]'
           }`}
         >
@@ -587,7 +586,7 @@ export default function HomePage() {
           </Reveal>
 
           <Reveal delay={0.1} className="flex flex-col items-center">
-            <h1 className={`${displayFont.className} max-w-[960px] text-[40px] font-bold leading-[1.08] tracking-[-0.02em] text-[#111827] sm:text-[56px] lg:text-[68px]`}>
+            <h1 className="max-w-[960px] text-[40px] font-extrabold leading-[1.1] text-[#111827] sm:text-[56px] lg:text-[68px]">
               Your Resume,
               <br />
               Perfected by <span className={GRADIENT_TEXT}>AI Intelligence.</span>

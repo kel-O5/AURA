@@ -3,9 +3,14 @@
 // The one place the Aura logo is drawn. The picture (public/Aura_Logo_Full.png) already
 // contains the dolphin AND the "AURA" name, so never put separate "Aura" text next to it.
 //
-// The "AURA" letters are about a third of the picture's height, so the heights below are
-// chosen to keep them readable: nav 48/56px tall (letters ~16/19px high), auth 96px (~33px),
-// footer 48px (~16px). Need another size? Add it to SIZES or pass a className such as "h-16".
+// HOW TO CHANGE THE SIZE
+//   1. Everywhere at once: edit SIZES below (Tailwind height classes:
+//      h-10 = 40px, h-12 = 48px, h-14 = 56px, h-16 = 64px, h-20 = 80px, h-24 = 96px, h-28 = 112px).
+//   2. One place only: pass a height in pixels, e.g.  <AuraLogo size="auth" height={120} />
+// The width always follows automatically, so the logo is never stretched.
+//
+// The "AURA" letters are about a third of the picture's height, so a 48px logo has letters
+// about 16px high. Stay above roughly 44px so the name stays readable.
 
 import Image from 'next/image';
 
@@ -17,10 +22,13 @@ const SIZES = {
 
 export default function AuraLogo({
   size = 'nav',
+  height,
   className = '',
   priority = false,
 }: {
   size?: keyof typeof SIZES;
+  /** Height in pixels. When set it replaces the preset size. */
+  height?: number;
   className?: string;
   priority?: boolean;
 }) {
@@ -28,10 +36,11 @@ export default function AuraLogo({
     <Image
       src="/Aura_Logo_Full.png"
       alt="Aura"
-      width={720}
-      height={301}
+      width={700}
+      height={280}
       priority={priority}
-      className={`w-auto ${SIZES[size]} ${className}`}
+      style={height ? { height } : undefined}
+      className={`w-auto ${height ? '' : SIZES[size]} ${className}`}
     />
   );
 }
