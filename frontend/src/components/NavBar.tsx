@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LogOut, ChevronDown, Menu, X } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
+import AuraLogo from '@/components/AuraLogo';
 import { usePathname } from 'next/navigation';
 import { getStoredUser } from '@/lib/auth';
 
@@ -199,11 +199,11 @@ export const Navbar = ({
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       className="fixed top-6 inset-x-4 sm:inset-x-8 lg:inset-x-20 z-50 font-['DM_Sans',_sans-serif]"
     >
-      <div className="relative flex items-center justify-between gap-3 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-5 pr-3 py-3 sm:pl-6 sm:pr-3.5 sm:py-3.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
-        {/* Logo / brand link. The logo file lives in /public (Aura_LogoRaster.png). */}
-        <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/Aura_LogoRaster.png" alt="" width={28} height={28} priority />
-          <span className="text-[22px] font-bold tracking-tight text-[#111827]">Aura</span>
+      <div className="relative flex items-center justify-between gap-3 rounded-full border border-white bg-white/80 backdrop-blur-[10px] pl-5 pr-3 py-2 sm:pl-6 sm:pr-3.5 sm:py-2.5 shadow-[0px_2px_8px_0px_rgba(31,41,55,0.04),0px_8px_32px_0px_rgba(31,41,55,0.06)]">
+        {/* Logo / brand link. AuraLogo is the full logo (dolphin + "AURA" name), so there is
+            no separate text next to it. Change its size in src/components/AuraLogo.tsx. */}
+        <Link href="/" aria-label="Aura home" className="flex shrink-0 items-center">
+          <AuraLogo size="nav" priority />
         </Link>
 
         {/* Nav links in the middle on wide screens (lg and up). They sit in their own
@@ -320,7 +320,7 @@ export const Navbar = ({
               }}
               aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isMenuOpen}
-              className="lg:hidden flex size-10 shrink-0 items-center justify-center rounded-full text-[#7c3aed] hover:bg-[#7c3aed]/10 transition-colors"
+              className="lg:hidden flex size-10 shrink-0 items-center justify-center rounded-full text-[#111827] hover:bg-black/[0.05] transition-colors"
             >
               {isMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
             </button>

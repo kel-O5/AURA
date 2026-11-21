@@ -12,8 +12,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { displayFont } from '@/lib/fonts';
 import Link from 'next/link';
-import Image from 'next/image';
+import AuraLogo from '@/components/AuraLogo';
 import { useRouter } from 'next/navigation';
 import { DM_Sans } from 'next/font/google';
 import { ArrowLeft, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
@@ -225,16 +226,15 @@ export default function LoginPage() {
         {/* CHANGED: this wrapper <div> is now a <Reveal> with the same classes, so the
             logo + card fade in together once on load. */}
         <Reveal className="flex w-full max-w-[480px] flex-col items-center gap-5">
-          {/* Logo. Same file the Navbar uses (lives in /public). */}
-          <Link href="/" className="flex items-center justify-center gap-[12px]">
-            <Image src="/Aura_LogoRaster.png" alt="" width={48} height={48} priority />
-            <span className="text-[30px] font-bold text-[#111827]">Aura</span>
+          {/* Logo: the full logo already includes the "AURA" name (see AuraLogo.tsx). */}
+          <Link href="/" aria-label="Aura home" className="flex items-center justify-center">
+            <AuraLogo size="auth" priority />
           </Link>
 
           {/* Form card */}
           <div className="flex w-full flex-col gap-6 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] px-6 py-9 shadow-[0_4px_16px_rgba(124,58,237,0.05),0_20px_60px_rgba(17,24,39,0.09)] backdrop-blur-[12px] sm:px-10">
             <div className="flex flex-col items-center gap-[6px] text-center">
-              <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Welcome Back</h1>
+              <h1 className={`${displayFont.className} text-[32px] font-bold leading-tight tracking-[-0.01em] text-[#111827]`}>Welcome Back</h1>
               <p className="text-[14px] text-[#4b5563]">Sign in to your AURA account</p>
             </div>
 

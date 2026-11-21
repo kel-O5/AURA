@@ -9,6 +9,7 @@
 import { Fragment, useId, useState } from 'react';
 import Link from 'next/link';
 import { DM_Sans } from 'next/font/google';
+import { displayFont } from '@/lib/fonts';
 import {
   ArrowRight,
   Brain,
@@ -17,6 +18,7 @@ import {
   Gauge,
   Layers,
   Lightbulb,
+  Loader2,
   Lock,
   Mail,
   Search,
@@ -38,7 +40,8 @@ const dmSans = DM_Sans({
   display: 'swap',
 });
 
-// Shown in the Contact section and used as the recipient of the contact form.
+// Shown in the Contact section. (The contact form itself is emailed by the server, see
+// src/app/api/contact/route.ts, which reads its recipient from CONTACT_TO_EMAIL.)
 const CONTACT_EMAIL = 'analyzeaura@gmail.com';
 
 // ───────────── Shared styles ─────────────
@@ -53,7 +56,7 @@ const GRADIENT_TEXT = `${GRADIENT_BG} bg-clip-text text-transparent`;
 
 // ADDED: hover lift for buttons (with reduced-motion support).
 const BTN_MOTION =
-  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0';
+  'transition-all duration-200 ease-out hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0 disabled:hover:translate-y-0';
 
 // Tinted icon tiles (background + icon color)
 const TILE = {
@@ -68,7 +71,7 @@ const HIGHLIGHTS: { icon: LucideIcon; color: string; label: string }[] = [
   { icon: CheckCircle2, color: 'text-[#10b981]', label: 'ATS Friendly' },
   { icon: Zap, color: 'text-[#f59e0b]', label: 'Instant Analysis' },
   { icon: Lightbulb, color: 'text-[#8b5cf6]', label: 'Smart Suggestions' },
-  { icon: Gauge, color: 'text-[#06b6d4]', label: 'ATS Score' },
+  { icon: Gauge, color: 'text-[#06b6d4]', label: 'Resume Score' },
   { icon: Lock, color: 'text-[#7c3aed]', label: '100% Private' },
 ];
 
@@ -97,37 +100,37 @@ const FEATURES: { icon: LucideIcon; tile: string; title: string; text: string }[
   {
     icon: Brain,
     tile: TILE.violet,
-    title: 'Resume Content Analysis',
+    title: 'AI Resume Analysis',
     text: 'Our advanced language models scan your document to provide instant feedback on content strength, verb usage, and readability.',
   },
   {
     icon: ShieldCheck,
     tile: TILE.cyan,
-    title: 'ATS Score Checking',
+    title: 'ATS Compatibility Check',
     text: 'Verify if your layout is optimized for parsing tools. Avoid templates with broken tables, text columns, or bad fonts.',
   },
   {
     icon: Search,
     tile: TILE.amber,
-    title: 'Smart Suggestions',
+    title: 'Smart Keyword Suggestions',
     text: 'Compare your resume directly with real-world job descriptions. Add crucial search keys that human screeners look for.',
   },
   {
     icon: Gauge,
     tile: TILE.emerald,
-    title: 'Dimension Analysis',
+    title: 'Resume Scoring',
     text: 'Receive an objective 0-100 score based on standard industry thresholds. Your score is calculated across Keyword Match, Format Compliance, Section Structure, and Impact Metrics, giving you a clear benchmark before applying.',
   },
   {
     icon: Target,
     tile: TILE.violet,
-    title: 'Top Company Matches',
+    title: 'Company Targeting',
     text: 'Select specific top-tier companies. AURA adapts its insights to match historical templates favored by those team structures.',
   },
   {
     icon: Lock,
     tile: TILE.cyan,
-    title: 'Privacy Protection',
+    title: 'Privacy First',
     text: 'Your upload is safely analyzed using advanced encryption. Data is completely discarded after download. 100% private.',
   },
 ];
@@ -232,7 +235,7 @@ function SectionHeader({
     <Reveal className="flex w-full justify-center">
       <div className="flex w-full max-w-[800px] flex-col items-center gap-4 text-center">
         <h2
-          className={`font-extrabold leading-[1.2] text-[#111827] ${
+          className={`${displayFont.className} font-bold leading-[1.2] tracking-[-0.01em] text-[#111827] ${
             size === 'lg' ? 'text-[32px] sm:text-[40px]' : 'text-[26px] sm:text-[32px]'
           }`}
         >
@@ -313,37 +316,68 @@ const fieldClass = (hasError: boolean) =>
   ].join(' ');
 
 // Contact form card from the Figma landing page.
-// There is no contact API yet, so a valid submit opens the visitor's email app
-// with the message pre-filled and addressed to `email`. When a backend endpoint
-// exists, replace the body of `sendMessage` with a fetch() to it.
-function ContactForm({ email }: { email: string }) {
+// A valid submit POSTs to /api/contact (src/app/api/contact/route.ts), which emails the
+// message to the Aura inbox with the visitor's address as Reply-To.
+const MESSAGE_MAX = 2000;
+
+function ContactForm() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [fromEmail, setFromEmail] = useState('');
   const [message, setMessage] = useState('');
+  // Honeypot: hidden from people, filled in by bots. The server drops those messages.
+  const [website, setWebsite] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
-  // True after a successful submit; drives the "your email app should open" note.
-  const [opened, setOpened] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  // Called on every keystroke: drops that field's error and hides the success
+  // Called on every keystroke: drops that field's error and hides the sent / failed
   // note, since the message it refers to has now been edited.
   const clearError = (field: FieldName) => {
     setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
-    if (opened) setOpened(false);
+    if (status === 'sent' || status === 'error') setStatus('idle');
   };
 
-  // Builds a mailto: link and clicks it. Using a temporary <a> opens the
-  // visitor's mail client without navigating the page away.
-  const sendMessage = () => {
-    const name = `${firstName.trim()} ${lastName.trim()}`;
-    const subject = `Message from ${name}`;
-    const body = `${message.trim()}\n\n— ${name} (${fromEmail.trim()})`;
-    const link = document.createElement('a');
-    link.href = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    link.click();
+  const sendMessage = async () => {
+    setStatus('sending');
+    setServerError(null);
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: fromEmail.trim(),
+          message: message.trim(),
+          website,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setServerError(data?.error ?? "We couldn't send your message. Please try again.");
+        setStatus('error');
+        return;
+      }
+
+      // Sent: empty the form so the same message isn't sent twice by accident.
+      setFirstName('');
+      setLastName('');
+      setFromEmail('');
+      setMessage('');
+      setStatus('sent');
+    } catch {
+      // fetch only throws when the request never reached the server.
+      setServerError('Could not reach the server. Check your internet connection and try again.');
+      setStatus('error');
+    }
   };
 
   const handleSubmit = () => {
+    if (status === 'sending') return;
+
     const next: FieldErrors = {};
     if (!firstName.trim()) next.firstName = 'This field is required';
     if (!lastName.trim()) next.lastName = 'This field is required';
@@ -354,8 +388,7 @@ function ContactForm({ email }: { email: string }) {
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
-    sendMessage();
-    setOpened(true);
+    void sendMessage();
   };
 
   return (
@@ -368,6 +401,19 @@ function ContactForm({ email }: { email: string }) {
       }}
       className="flex w-full flex-col gap-5 rounded-[24px] border-[1.5px] border-white bg-white/[0.72] p-6 shadow-[0_4px_16px_rgba(124,58,237,0.03),0_16px_48px_rgba(17,24,39,0.06)] backdrop-blur-[12px] sm:p-10 lg:min-w-0 lg:flex-[1.24]"
     >
+      {/* Honeypot (see above): not visible, not focusable, ignored by screen readers */}
+      <div aria-hidden="true" className="sr-only">
+        <label htmlFor="contact-website">Website</label>
+        <input
+          id="contact-website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
+      </div>
+
       {/* Name row */}
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
@@ -378,6 +424,7 @@ function ContactForm({ email }: { email: string }) {
             id="contact-first-name"
             type="text"
             autoComplete="given-name"
+            maxLength={50}
             placeholder="Enter your first name..."
             value={firstName}
             onChange={(e) => {
@@ -398,6 +445,7 @@ function ContactForm({ email }: { email: string }) {
             id="contact-last-name"
             type="text"
             autoComplete="family-name"
+            maxLength={50}
             placeholder="Enter your last name..."
             value={lastName}
             onChange={(e) => {
@@ -420,6 +468,7 @@ function ContactForm({ email }: { email: string }) {
           id="contact-email"
           type="email"
           autoComplete="email"
+          maxLength={254}
           placeholder="Enter your email address..."
           value={fromEmail}
           onChange={(e) => {
@@ -439,6 +488,7 @@ function ContactForm({ email }: { email: string }) {
         </label>
         <textarea
           id="contact-message"
+          maxLength={MESSAGE_MAX}
           placeholder="Enter your message..."
           value={message}
           onChange={(e) => {
@@ -458,18 +508,33 @@ function ContactForm({ email }: { email: string }) {
         {/* CHANGED: `transition` -> BTN_MOTION (hover lift) */}
         <button
           type="submit"
-          className={`flex items-center justify-center gap-[10px] rounded-full ${GRADIENT_BG} py-[14px] pl-7 pr-5 text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95`}
+          disabled={status === 'sending'}
+          className={`flex items-center justify-center gap-[10px] rounded-full ${GRADIENT_BG} py-[14px] pl-7 pr-5 text-[15px] font-bold text-white shadow-[0_2px_3px_rgba(124,58,237,0.1),0_8px_12px_rgba(124,58,237,0.25)] ${BTN_MOTION} hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60`}
         >
-          Send Message
-          <span className="flex size-[26px] items-center justify-center rounded-full bg-white/[0.13]">
-            <ArrowRight className="size-[13px]" />
-          </span>
+          {status === 'sending' ? (
+            <>
+              <Loader2 className="size-[18px] animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              Send Message
+              <span className="flex size-[26px] items-center justify-center rounded-full bg-white/[0.13]">
+                <ArrowRight className="size-[13px]" />
+              </span>
+            </>
+          )}
         </button>
       </div>
 
-      {opened && (
+      {status === 'sent' && (
         <p role="status" className="text-[13px] font-medium text-[#10b981]">
-          Your email app should open with your message ready to send.
+          Thanks! Your message has been sent. We&apos;ll get back to you within 24 hours.
+        </p>
+      )}
+      {status === 'error' && serverError && (
+        <p role="alert" className="text-[13px] font-medium text-[#ef4444]">
+          {serverError}
         </p>
       )}
     </form>
@@ -522,7 +587,7 @@ export default function HomePage() {
           </Reveal>
 
           <Reveal delay={0.1} className="flex flex-col items-center">
-            <h1 className="max-w-[960px] text-[40px] font-extrabold leading-[1.1] text-[#111827] sm:text-[56px] lg:text-[68px]">
+            <h1 className={`${displayFont.className} max-w-[960px] text-[40px] font-bold leading-[1.08] tracking-[-0.02em] text-[#111827] sm:text-[56px] lg:text-[68px]`}>
               Your Resume,
               <br />
               Perfected by <span className={GRADIENT_TEXT}>AI Intelligence.</span>
@@ -624,7 +689,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Score breakdown: explains the four pillars behind "Dimension Analysis" above */}
+          {/* Score breakdown: explains the four pillars behind "Resume Scoring" above */}
           <div className="flex w-full flex-col items-center gap-12 pt-4">
             <SectionHeader
               size="md"
@@ -709,7 +774,7 @@ export default function HomePage() {
 
           {/* CHANGED: form is wrapped in <Reveal>; the wrapper takes the flex sizing */}
           <Reveal delay={0.15} className="w-full lg:min-w-0 lg:flex-[1.24]">
-            <ContactForm email={CONTACT_EMAIL} />
+            <ContactForm />
           </Reveal>
         </section>
       </main>

@@ -86,15 +86,10 @@ function renderEmail(opts: {
 <div style="background-color:#f0eeff;background-image:linear-gradient(90deg,#7c3aed 0%,#06b6d4 100%),radial-gradient(circle at 8% 6%,rgba(124,58,237,0.16) 0%,rgba(124,58,237,0) 40%),radial-gradient(circle at 94% 28%,rgba(6,182,212,0.14) 0%,rgba(6,182,212,0) 38%);background-repeat:no-repeat;background-size:100% 3px,100% 100%,100% 100%;padding:72px 16px 40px;font-family:'DM Sans',Helvetica,Arial,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;">
 
-    <!-- Logo -->
+    <!-- Logo (full logo with the AURA name) -->
     <tr>
-      <td align="center" style="padding-bottom:22px;">
-        <table role="presentation" cellpadding="0" cellspacing="0">
-          <tr>
-            <td width="44" height="44" style="width:44px;height:44px;font-size:0;line-height:0;"><img src="${logo}" width="44" height="44" alt="Aura" style="display:block;width:44px;height:44px;border:0;font-size:14px;color:#111827;" /></td>
-            <td style="padding-left:12px;vertical-align:middle;font-size:28px;font-weight:700;letter-spacing:-0.6px;color:#111827;">Aura</td>
-          </tr>
-        </table>
+      <td align="center" style="padding-bottom:22px;font-size:0;line-height:0;">
+        <img src="${logo}" width="200" height="84" alt="Aura" style="display:block;width:200px;height:84px;border:0;font-size:22px;font-weight:700;line-height:84px;color:#7c6aa6;" />
       </td>
     </tr>
 
@@ -234,7 +229,7 @@ export async function POST(req: Request) {
         fullName,
         email,
         message,
-        logoUrl: `${siteUrl}/Aura_LogoRaster.png`,
+        logoUrl: `${siteUrl}/Aura_Logo_Full.png`,
         receivedAt,
       }),
     });

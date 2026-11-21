@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { displayFont } from '@/lib/fonts';
 import { getAssuranceLevel, getStoredUser, saveSession } from '@/lib/auth';
 import { getPasswordPolicyError, PASSWORD_POLICY_MESSAGE } from '@/lib/passwordPolicy';
 import AuthShell, { GRADIENT_BG } from './AuthShell';
@@ -401,7 +402,7 @@ export default function SignUp() {
       {step === 'form' && (
         <>
           <div className="flex flex-col items-center gap-[6px] text-center">
-            <h1 className="text-[28px] font-extrabold leading-tight text-[#111827]">Create Account</h1>
+            <h1 className={`${displayFont.className} text-[32px] font-bold leading-tight tracking-[-0.01em] text-[#111827]`}>Create Account</h1>
             <p className="text-[14px] text-[#4b5563]">Sign up for your AURA account</p>
           </div>
 
