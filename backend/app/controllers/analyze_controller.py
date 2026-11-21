@@ -82,6 +82,7 @@ from app.services.resume_enricher import enrich_resume_local
 from app.services.target_job_matcher import calculate_target_job_gap
 from app.data.it_domain import is_it_title, canonical_it_title
 from app.data.job_requirements import JOB_REQUIREMENTS
+from app.data.certification_catalog import get_certification_url
 
 # Most job titles a user may select at once (mirrors JobTitleSelector's maxSelections).
 MAX_TARGET_JOBS = 3
@@ -1361,6 +1362,7 @@ _CERT_PROVIDERS = [
     ("aws ", "Amazon Web Services"),
     ("azure ", "Microsoft"),
     ("microsoft ", "Microsoft"),
+    ("fabric ", "Microsoft"),
     ("google ", "Google"),
     ("meta ", "Meta"),
     ("comptia ", "CompTIA"),
@@ -1462,6 +1464,7 @@ def _shape_certifications(
             "provider": _cert_provider(raw_name),
             "reason": reason,
             "relevance": relevance,
+            "url": get_certification_url(raw_name),
         })
 
     # -- 1. target-job certifications ---------------------------------------

@@ -66,6 +66,8 @@ export interface AnalysisResult {
     provider: string;
     reason: string;
     relevance: string;
+    // Official certification page (null/absent when there is none)
+    url?: string | null;
   }[];
 }
 

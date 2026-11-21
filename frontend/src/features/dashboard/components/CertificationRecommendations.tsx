@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
-import { Award } from 'lucide-react';
+import { Award, ExternalLink } from 'lucide-react';
 
 // ADDED: hover lift for buttons (no lift while disabled, respects reduced motion).
 const BTN_MOTION =
@@ -18,6 +18,8 @@ export type Certification = {
   provider: string;
   reason: string;
   relevance: string;
+  // Official certification page; the link is hidden when missing.
+  url?: string | null;
 };
 
 type CertificationRecommendationsProps = {
@@ -98,6 +100,18 @@ export default function CertificationRecommendations({
 
                 <p className="text-[13px] leading-[1.4] text-[#4b5563]">{cert.provider}</p>
                 <p className="text-[13px] leading-[1.4] text-[#4b5563]">{cert.reason}</p>
+
+                {cert.url && cert.url.startsWith('https://') && (
+                  <a
+                    href={cert.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-auto inline-flex w-fit items-center gap-[6px] text-[13px] font-semibold text-[#8b5cf6] hover:text-[#7c3aed] hover:underline"
+                  >
+                    View certification
+                    <ExternalLink className="size-3.5" aria-hidden="true" />
+                  </a>
+                )}
               </motion.div>
             );
           })}

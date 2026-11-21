@@ -89,7 +89,6 @@ JOB_REQUIREMENTS = {
             "aws certified developer",
         ],
         "optional_certifications": [
-            "azure developer associate",
         ],
     },
 
@@ -132,7 +131,6 @@ JOB_REQUIREMENTS = {
             "aws certified developer",
         ],
         "optional_certifications": [
-            "azure developer associate",
         ],
     },
 
@@ -203,7 +201,6 @@ JOB_REQUIREMENTS = {
             "push notifications",
         ],
         "required_certifications": [
-            "associate android developer",
         ],
         "optional_certifications": [
             "aws certified developer",
@@ -317,7 +314,6 @@ JOB_REQUIREMENTS = {
         ],
         "required_certifications": [
             "aws certified security specialty",
-            "azure security engineer associate",
         ],
         "optional_certifications": [
             "google professional cloud security engineer",
@@ -481,7 +477,6 @@ JOB_REQUIREMENTS = {
         ],
         "optional_certifications": [
             "comptia network+",
-            "aws advanced networking specialty",
         ],
     },
 
@@ -557,7 +552,7 @@ JOB_REQUIREMENTS = {
         ],
         "required_certifications": [
             "aws certified data engineer",
-            "azure data engineer associate",
+            "fabric data engineer associate",
         ],
         "optional_certifications": [
             "google professional data engineer",
@@ -633,7 +628,6 @@ JOB_REQUIREMENTS = {
         ],
         "optional_certifications": [
             "microsoft azure database administrator",
-            "aws database specialty",
         ],
     },
 
@@ -674,8 +668,8 @@ JOB_REQUIREMENTS = {
             "google professional machine learning engineer",
         ],
         "optional_certifications": [
-            "aws machine learning specialty",
-            "azure ai engineer associate",
+            "aws certified machine learning engineer",
+            "azure ai apps and agents developer associate",
         ],
     },
 
@@ -711,10 +705,10 @@ JOB_REQUIREMENTS = {
             "model deployment",
         ],
         "required_certifications": [
-            "aws machine learning specialty",
+            "aws certified machine learning engineer",
         ],
         "optional_certifications": [
-            "azure ai engineer associate",
+            "azure ai apps and agents developer associate",
             "google professional machine learning engineer",
         ],
     },

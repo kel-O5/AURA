@@ -23,6 +23,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from postgrest.types import CountMethod
 
+from app.data.certification_catalog import get_certification_url
 from app.dependencies.auth import get_current_user
 from app.extensions.supabase_client import supabase_admin
 from app.models.auth_schemas import AuthUser
@@ -145,6 +146,18 @@ def get_analysis(
     # Preferred: the complete payload saved at analysis time.
     payload = row.get("result_json")
     if isinstance(payload, dict):
+        # Analyses saved before certification links existed have no `url`;
+        # fill it in from the catalog so old results get links too.
+        certs = payload.get("certifications")
+        if isinstance(certs, list):
+            payload = {
+                **payload,
+                "certifications": [
+                    {**c, "url": c.get("url") or get_certification_url(str(c.get("name", "")))}
+                    if isinstance(c, dict) else c
+                    for c in certs
+                ],
+            }
         return {
             **payload,
             "analysis_id": str(row["id"]),
