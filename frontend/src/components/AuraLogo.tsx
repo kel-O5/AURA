@@ -16,8 +16,8 @@ import Image from 'next/image';
 
 const SIZES = {
   nav: 'h-10 sm:h-12',
-  auth: 'h-24',
-  footer: 'h-12',
+  auth: 'h-20',
+  footer: 'h-10',
 } as const;
 
 export default function AuraLogo({
