@@ -535,7 +535,7 @@ export default function AssessmentSidebar({ score, sections }: AssessmentSidebar
       {/* Overall Assessment card with score chart */}
       <div className={CARD_CLASS}>
         <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-bold uppercase text-[#4b5563]">Overall Assessment</h2>
+          <h2 className="text-[14px] font-bold uppercase text-[#4b5563]">ATS SCORE</h2>
           <InfoButton
             label="How is the ATS score calculated?"
             onClick={() => setOpenModal('score')}

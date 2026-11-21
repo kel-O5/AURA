@@ -338,7 +338,7 @@ export default function DashboardPage() {
             delay={0.25}
           />
           <StatCard
-            label="Match Score"
+            label="Top Match"
             value={matchScoreValue !== null ? `${matchScoreValue}%` : '-'}
             hint={matchScoreValue !== null ? matchScoreHint : 'No score yet'}
             delay={0.35}
